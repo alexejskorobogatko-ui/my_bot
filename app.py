@@ -778,14 +778,11 @@ async def run_bots():
     bot1 = Userbot(ACCOUNT1_SESSION, ACCOUNT1_API_ID, ACCOUNT1_API_HASH)
     bot2 = Userbot(ACCOUNT2_SESSION, ACCOUNT2_API_ID, ACCOUNT2_API_HASH)
     
-    # Запускаем обоих в одном событийном цикле
     await asyncio.gather(
         bot1.run(),
         bot2.run()
     )
 
 if __name__ == "__main__":
-    # Запускаем веб-сервер для Render в фоне
     threading.Thread(target=run_web, daemon=True).start()
-    # Запускаем двух ботов
     asyncio.run(run_bots())
