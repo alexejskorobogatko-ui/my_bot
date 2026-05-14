@@ -43,11 +43,11 @@ ACCOUNT2_API_ID = 30843796
 ACCOUNT2_API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
 
 # ==================== ТЕКСТЫ ====================
-menutext = "<b>{}</b>\nвторой хелп - <code>.menu</code>\n\n остальные команды:\n<code>.list</code> + медия — список работы бота.\n<code>.help</code> + медия — mеnю.\n<code>.menu</code> — второе меню.\n<code>.words</code> + репл — количество слов в сообщении.\n<code>.load</code> + репл — смена шаблов бота.\n<code>.file</code> — основной шаблон бота.\n<code>.uptime</code> — аптайм.\n<code>.ping</code> — пинг.\n<code>.id</code> — узнать чат /юз айди\n<code>.x0</code> + репл — загрузить медию на хостинг\n\nthis chat id: <code>{}</code>\nyour user id: <code>{}</code>\nyour name: <code>{}</code>\nyour username: @{}</b>\nbot owner — <a href='.'>@misosphere</a></b>"
+menutext = "<b>{}</b>\nвторой хелп - <code>.menu</code>\n\n остальные команды:\n<code>.help</code> + медия — mеnю.\n<code>.menu</code> — второе меню.\n<code>.words</code> + репл — количество слов в сообщении.\n<code>.load</code> + репл — смена шаблов бота.\n<code>.file</code> — основной шаблон бота.\n<code>.uptime</code> — аптайм и пинг.\n<code>.id</code> — узнать чат / юз айди\n<code>.x0</code> + репл — загрузить медию на хостинг\n\nthis chat id: <code>{}</code>\nyour user id: <code>{}</code>\nyour name: <code>{}</code>\nyour username: @{}</b>\nbot owner — <a href='.'>@misosphere</a></b>"
 
 shablon = ["я тебе все ебало переломаю", "ты сын шлюхи ебаный", "ты давай отсоси мою залупу"]
 
-menu = "первый хелп -  <code>.help</code>\n\n команды спам:\n<code>.tagger</code> + айди + время + скорость + реплай — спам-теггер.\n<code>.tag</code> + чат_айди + юз_айди + время + скорость — спам-теггер.\n<code>.off</code> / .tagoff + айди — остановка теггера.\n<code>.clr</code> + время + скорость + реплай — календарь.\n<code>.cal</code> + чат_айди + время + скорость — календарь.\n<code>.uchange</code> + [shapka,скорость,вреmя] + юз_айди — смена аргументов автоответчика.\n<code>.avt</code> + время + реплай\n<code>.target</code> + юз.\nовнер бота - <tg://user?id=472362019'>@misosphere</a>"
+menu = "первый хелп -  <code>.help</code>\n\n команды спам:\n<code>.tagger</code> + айди + время + скорость + реплай — спам-теггер.\n<code>.off</code> + айди — остановка теггера.\n<code>.clr</code> + время + скорость + реплай — календарь.\n<code>.cal</code> + чат_айди + время + скорость — календарь.\n<code>.uchange</code> + [shapka,скорость,вреmя] + юз_айди — смена аргументов автоответчика.\n<code>.avt</code> + время + реплай\n<code>.target</code> + юз.\nовнер бота - <tg://user?id=472362019'>@misosphere</a>"
 
 # ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
 afk_photo = ""
@@ -63,13 +63,11 @@ autoreply_photo = {}
 autoreply_shpk = {}
 start_timer = 10
 tagger_chats = {}
-tag_chats = {}
 reason = "бот"
 mid = 'https://x0.at/cUQa.jpg'
 name = "ебательный аппарат"
 mh = 'https://x0.at/4JEh.jpeg'
 mm = 'https://x0.at/4JEh.jpeg'
-mlist = 'https://x0.at/Dv0D.jpg'
 cmds = 'https://x0.at/Dv0D.jpg'
 
 # ========== МЕДИА КОМАНДЫ ==========
@@ -80,10 +78,8 @@ media_counter = 0
 poste_list = {}
 poste_blocklist = []
 
-# ========== МЕДИА ДЛЯ НОВЫХ КОМАНД ==========
-system_media = None
-post_media = None
-media_cmd_media = None
+# ========== МЕДИА ДЛЯ .status ==========
+status_media = None
 
 # ==================== КЛАСС ЮЗЕРБОТА ====================
 class Userbot:
@@ -107,20 +103,6 @@ class Userbot:
                 await msg.edit(caption, parse_mode='html')
         else:
             await msg.edit(caption, parse_mode='html')
-
-    async def is_admin_in_group(self, chat_id):
-        """Проверяет, является ли аккаунт администратором в группе/супергруппе (не в канале)"""
-        try:
-            chat = await self.client.get_entity(chat_id)
-            # Пропускаем каналы и личные чаты
-            if isinstance(chat, Channel):
-                if chat.broadcast:  # это канал, не группа
-                    return False
-            # Проверяем права
-            full_chat = await self.client.get_permissions(chat_id)
-            return full_chat.is_admin
-        except:
-            return False
 
     # ========== WATCHER ==========
     async def watcher(self, msg):
@@ -278,7 +260,7 @@ class Userbot:
             autoreply_time[user_id] = int(value)
             await msg.edit(f'<b>задержка для {user_id}: {autoreply_time[user_id]} сек</b>', parse_mode='html')
 
-    # ========== ТЕГГЕРЫ ==========
+    # ========== ТЕГГЕР ==========
     async def tagger_handler(self, msg):
         args = msg.text.split(maxsplit=1)
         if len(args) < 2: return await msg.edit("<b>аргументы: user_id время [медиа] [текст]</b>", parse_mode='html')
@@ -301,28 +283,6 @@ class Userbot:
             except: pass
             await asyncio.sleep(time_val)
         if chat_id in tagger_chats: del tagger_chats[chat_id]
-
-    async def tag_handler(self, msg):
-        args = msg.text.split(maxsplit=1)
-        if len(args) < 2: return
-        parts = args[1].split()
-        if len(parts) < 3: return
-        chat_id = int(parts[0])
-        user_id = int(parts[1])
-        time_val = int(parts[2])
-        if time_val < 3: return await msg.edit("<b>мин. задержка - 3</b>", parse_mode='html')
-        photo = parts[3] if len(parts) > 3 and 'https' in parts[3] else None
-        caption = ' '.join(parts[4:]) if len(parts) > 4 else ''
-        tag_chats[chat_id] = True
-        await msg.edit(f'<b>включен\nвыкл: <code>.tagoff {chat_id}</code></b>', parse_mode='html')
-        while chat_id in tag_chats:
-            text = f"{caption} <a href='tg://user?id={user_id}'>{choice(shablon)}</a>"
-            try:
-                if photo: await self.client.send_file(chat_id, photo, caption=text, parse_mode='html')
-                else: await self.client.send_message(chat_id, text, parse_mode='html')
-            except: pass
-            await asyncio.sleep(time_val)
-        if chat_id in tag_chats: del tag_chats[chat_id]
 
     # ========== ID ==========
     async def id_handler(self, msg):
@@ -414,15 +374,14 @@ class Userbot:
         os.remove('texts.txt')
         await msg.delete()
 
-    # ========== UPTIME ==========
+    # ========== UPTIME + PING (объединено) ==========
     async def uptime_handler(self, msg):
         bot_runtime = int(time.time() - start_time)
-        await msg.edit(f'аптайм бота: <code>{str(timedelta(seconds=bot_runtime))}</code>', parse_mode='html')
-
-    # ========== PING ==========
-    async def ping_handler(self, msg):
-        ping_now = time.perf_counter_ns()
-        await msg.edit(f'<b>пинг: <code>{round((time.perf_counter_ns() - ping_now) / 10**2, 2)} ms</code></b>', parse_mode='html')
+        ping_start = time.perf_counter_ns()
+        await msg.edit("<b>измерение...</b>", parse_mode='html')
+        ping_ms = round((time.perf_counter_ns() - ping_start) / 10**6, 2)
+        uptime_str = str(timedelta(seconds=bot_runtime))
+        await msg.edit(f"<b>аптайм:</b> <code>{uptime_str}</code>\n<b>пинг:</b> <code>{ping_ms} ms</code>", parse_mode='html')
 
     # ========== ВСТУПИТЬ/ВЫЙТИ ИЗ ЧАТА ==========
     async def join_handler(self, msg):
@@ -460,28 +419,12 @@ class Userbot:
         if chat_id in spam_state1: del spam_state1[chat_id]
         await msg.edit(f"<b>остановлено в чате <code>{chat_id}</code></b>", parse_mode='html')
 
-    async def tagoff_handler(self, msg):
-        global tag_chats
-        args = await self.get_args(msg)
-        chat_id = int(args.split()[0]) if args else msg.chat_id
-        if chat_id in tag_chats: del tag_chats[chat_id]
-        await msg.edit(f"<b>остановлено в чате <code>{chat_id}</code></b>", parse_mode='html')
-
     async def clear_flood_handler(self, msg):
-        global spam_state, spam_state1, tag_chats, tagger_chats
-        spam_state.clear(); spam_state1.clear(); tag_chats.clear(); tagger_chats.clear()
+        global spam_state, spam_state1, tagger_chats
+        spam_state.clear()
+        spam_state1.clear()
+        tagger_chats.clear()
         await msg.edit("все флудилки оффнуты")
-
-    async def list_handler(self, msg):
-        global mlist
-        if len(msg.text.split()) > 1:
-            mlist = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
-            return await msg.edit("<b>медиа для .list установлено</b>", parse_mode='html')
-        response = f"spam_state: {spam_state}\n\nspam_state1: {spam_state1}\n\nautoreply_list: {autoreply_list}\n\ntagger_chats: {tagger_chats}\n\ntag_chats: {tag_chats}"
-        if mlist:
-            await self.client.send_file(msg.chat_id, mlist, caption=response, parse_mode='html')
-            await msg.delete()
-        else: await msg.edit(response, parse_mode='html')
 
     async def target_handler(self, msg):
         args = await self.get_args(msg)
@@ -533,8 +476,7 @@ class Userbot:
 <code>.menu</code> — второе меню
 <code>.cmd</code> — этот список команд
 <code>.id</code> — узнать chat id / user id
-<code>.ping</code> — проверить пинг бота
-<code>.uptime</code> — аптайм бота
+<code>.uptime</code> — аптайм и пинг
 <code>.name</code> + текст — изменить имя бота
 
 AFK РЕЖИМ:
@@ -562,11 +504,9 @@ AFK РЕЖИМ:
 <code>.clr [время] [медиа] [шапка]</code> + реплай — календарь
 <code>.cal [chat_id] [время] [медиа] [шапка]</code> — календарь в другой чат
 
-ТЕГГЕРЫ:
+ТЕГГЕР:
 <code>.tagger [user_id] [время] [медиа] [текст]</code> + реплай — теггер
-<code>.tag [chat_id] [user_id] [время] [медиа] [текст]</code> — теггер в другой чат
-<code>.off [chat_id]</code> — остановить tagger
-<code>.tagoff [chat_id]</code> — остановить tag
+<code>.off [chat_id]</code> — остановить теггер
 
 РАБОТА С ШАБЛОНАМИ:
 <code>.load</code> + реплай на файл — загрузить свой шаблон
@@ -581,7 +521,6 @@ AFK РЕЖИМ:
 
 ДРУГИЕ КОМАНДЫ:
 <code>.words</code> + реплай — подсчёт слов/символов
-<code>.list</code> — список активных процессов
 <code>.c_flood</code> — отключить все флудилки
 <code>.target [username/id]</code> — установить цель для авто-удаления
 
@@ -589,7 +528,6 @@ AFK РЕЖИМ:
 <code>.help [ссылка]</code> — установить медиа для .help
 <code>.menu [ссылка]</code> — установить медиа для .menu
 <code>.cmd [ссылка]</code> — установить медиа для .cmd
-<code>.list [ссылка]</code> — установить медиа для .list
 <code>.id [ссылка]</code> — установить медиа для .id
 
 МЕДИА КОМАНДЫ:
@@ -602,7 +540,7 @@ AFK РЕЖИМ:
 <code>.phodel номер|имя</code> — удалить медиа
 
 POST КОМАНДЫ:
-<code>.poste 'ссылка' минуты</code> — пересылка поста в группы (только где аккаунт админ)
+<code>.poste 'ссылка' минуты</code> — пересылка поста в чаты (кроме каналов и ЛС)
 <code>.poste_stop</code> — остановить все рассылки
 <code>.poste_stop ссылка</code> — остановить по ссылке
 <code>.poste_list</code> — список активных рассылок
@@ -638,24 +576,6 @@ POST КОМАНДЫ:
             file = await reply_msg.download_media()
             if not file:
                 return await msg.edit("<b>не удалось скачать файл</b>", parse_mode='html')
-            
-            ext = 'jpg'
-            if hasattr(reply_msg.media, 'video') and reply_msg.media.video:
-                ext = 'mp4'
-            elif hasattr(reply_msg.media, 'audio') and reply_msg.media.audio:
-                ext = 'm4a'
-            elif hasattr(reply_msg.media, 'document') and reply_msg.media.document:
-                mime = reply_msg.media.document.mime_type
-                if 'video' in mime:
-                    ext = 'mp4'
-                elif 'audio' in mime:
-                    ext = 'm4a'
-                elif 'gif' in mime:
-                    ext = 'gif'
-                elif 'png' in mime:
-                    ext = 'png'
-                else:
-                    ext = 'jpg'
             
             with open(file, 'rb') as f:
                 response = requests.post(
@@ -781,7 +701,7 @@ POST КОМАНДЫ:
         media_counter = len(media_storage)
         await msg.edit(f"<b>медиа '{found}' удалено</b>", parse_mode='html')
 
-    # ========== POST COMMANDS (только группы где админ) ==========
+    # ========== POST COMMANDS (только чаты/беседы, не каналы и не ЛС) ==========
     async def poste_handler(self, msg):
         global poste_list, poste_blocklist
         args = await self.get_args(msg)
@@ -835,25 +755,18 @@ POST КОМАНДЫ:
         target_chats = []
         
         for d in dialogs:
-            # Проверяем, что это группа/супергруппа (не канал и не личный чат)
-            is_group = d.is_group or d.is_channel and not d.entity.broadcast
-            if not is_group:
-                continue
-            
-            # Пропускаем заблокированные
+            # Исключаем каналы (broadcast) и личные чаты (is_user)
+            if d.is_channel and d.entity.broadcast:
+                continue  # пропускаем каналы
+            if d.is_user:
+                continue  # пропускаем личные сообщения
+            # Остальное — группы, супергруппы, беседы
             if d.entity.id in poste_blocklist:
                 continue
-            
-            # Проверяем, является ли аккаунт админом
-            try:
-                permissions = await self.client.get_permissions(d.entity.id)
-                if permissions.is_admin:
-                    target_chats.append(d.entity.id)
-            except:
-                pass
+            target_chats.append(d.entity.id)
         
         if not target_chats:
-            return await msg.edit("<b>Нет доступных групп, где аккаунт является администратором.</b>", parse_mode='html')
+            return await msg.edit("<b>Нет доступных чатов для рассылки (группы/беседы).</b>", parse_mode='html')
         
         poste_list[link] = {
             'chats': target_chats,
@@ -863,7 +776,7 @@ POST КОМАНДЫ:
             'msg_id': msg_id
         }
         
-        await msg.edit(f"<b>Рассылка (пересылка) запущена только для групп, где аккаунт админ:\nСсылка: {link}\nИнтервал: {interval} мин\nЧатов: {len(target_chats)}\nОстановить: .poste_stop {link}</b>", parse_mode='html')
+        await msg.edit(f"<b>Рассылка (пересылка) запущена во все чаты (кроме каналов и ЛС):\nСсылка: {link}\nИнтервал: {interval} мин\nЧатов: {len(target_chats)}\nОстановить: .poste_stop {link}</b>", parse_mode='html')
         asyncio.create_task(self._poste_worker(link))
 
     async def _poste_worker(self, link):
@@ -935,39 +848,79 @@ POST КОМАНДЫ:
         poste_blocklist.clear()
         await msg.edit("<b>блок-лист полностью очищен</b>", parse_mode='html')
 
-    # ========== НОВЫЕ КОМАНДЫ: system, post, media ==========
-    async def system_handler(self, msg):
-        global system_media
+    # ========== СТАТУС (.status) ==========
+    async def status_handler(self, msg):
+        global status_media
         if len(msg.text.split()) > 1:
-            system_media = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
-            return await msg.edit("<b>медиа для .system установлено</b>", parse_mode='html')
+            status_media = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
+            return await msg.edit("<b>медиа для .status установлено</b>", parse_mode='html')
+        
         me = await self.client.get_me()
+        target_info = self.target_user if self.target_user else "не установлена"
+        current_chat = msg.chat_id
+        
+        # Получаем название текущего чата
+        try:
+            chat_entity = await msg.get_chat()
+            chat_name = chat_entity.title if hasattr(chat_entity, 'title') and chat_entity.title else "Личный чат"
+        except:
+            chat_name = str(current_chat)
+        
         status_text = f"""
 <bold>статус работы функций:</bold>
 
 спам (avt): {len(spam_state)} активных
 спам (nzt): {len(spam_state1)} активных
-теггер (tagger): {len(tagger_chats)} активных
-теггер (tag): {len(tag_chats)} активных
+теггер: {len(tagger_chats)} активных
 автоответчик: {len(autoreply_list)} пользователей
 рассылки (poste): {len(poste_list)} активных
 блок-лист (pblk): {len(poste_blocklist)} чатов
-цель (target): {self.target_user if self.target_user else 'не установлена'}
+AFK: {'включен' if state else 'выключен'}
+цель (target): {target_info}
+
+--- текущий чат ---
+название: {chat_name}
+айди: {current_chat}
 
 --- аккаунт ---
 имя: {me.first_name}
 юзернейм: @{me.username}
 айди: {me.id}
 """
-        await self.reply_with_media(msg, system_media, status_text)
+        await self.reply_with_media(msg, status_media, status_text)
 
+    # ========== ОСТАНОВИТЬ ВСЕ ФУНКЦИИ (.zw) ==========
     async def zw_handler(self, msg):
-        global spam_state, spam_state1, tagger_chats, tag_chats, autoreply_list, poste_list
-        spam_state.clear(); spam_state1.clear(); tagger_chats.clear(); tag_chats.clear(); autoreply_list.clear()
-        for link in poste_list: poste_list[link]['running'] = False
+        global spam_state, spam_state1, tagger_chats, autoreply_list, poste_list, state, user_list, start_timer, afk_photo, reason, afk_state_start, afk_state_reason, afk_state_photo
+        
+        # Останавливаем спамы
+        spam_state.clear()
+        spam_state1.clear()
+        
+        # Останавливаем теггеры
+        tagger_chats.clear()
+        
+        # Очищаем автоответчики
+        autoreply_list.clear()
+        
+        # Останавливаем рассылки poste
+        for link in list(poste_list.keys()):
+            poste_list[link]['running'] = False
         poste_list.clear()
-        await msg.edit("<bold>все функции остановлены</bold>", parse_mode='html')
+        
+        # Выключаем AFK
+        state = False
+        user_list = []
+        start_timer = 10
+        reason = "бот"
+        afk_photo = ""
+        
+        # Сбрасываем цель (target)
+        self.target_user = None
+        
+        await msg.edit("<bold>все функции остановлены</bold>\n(спамы, теггеры, автоответчики, рассылки, AFK, target)", parse_mode='html')
 
+    # ========== САМОТЕСТ (.selftest) ==========
     async def selftest_handler(self, msg):
         start_test = time.time()
         results = []
@@ -981,11 +934,12 @@ POST КОМАНДЫ:
         except Exception as e: results.append(f"отправка сообщений: ОШИБКА ({e})")
         results.append(f"задержка ответа: {round((time.time()-start_test)*1000,2)} ms")
         try:
-            _ = spam_state; _ = autoreply_list
+            _ = spam_state
             results.append("глобальные переменные: OK")
         except Exception as e: results.append(f"глобальные переменные: ОШИБКА ({e})")
         await msg.edit("\n".join(results), parse_mode='html')
 
+    # ========== ПОСТ МЕНЮ (.post) ==========
     async def post_cmd_handler(self, msg):
         global post_media
         if len(msg.text.split()) > 1:
@@ -994,7 +948,7 @@ POST КОМАНДЫ:
         post_text = """
 <bold>POST КОМАНДЫ:</bold>
 
-<code>.poste ссылка_на_пост минуты</code> — пересылка поста в группы (только где аккаунт админ)
+<code>.poste ссылка_на_пост минуты</code> — пересылка поста в чаты (кроме каналов и ЛС)
 <code>.poste_stop</code> — остановить все рассылки
 <code>.poste_stop ссылка</code> — остановить по ссылке
 <code>.poste_list</code> — список активных рассылок
@@ -1004,6 +958,7 @@ POST КОМАНДЫ:
 """
         await self.reply_with_media(msg, post_media, post_text)
 
+    # ========== МЕДИА МЕНЮ (.media) ==========
     async def media_cmd_handler(self, msg):
         global media_cmd_media
         if len(msg.text.split()) > 1:
@@ -1049,8 +1004,6 @@ POST КОМАНДЫ:
             elif text.startswith('.nrc') or text.startswith('.nrcc') or text.startswith('.setshpk'): await self.autoreply_handler(msg)
             elif text.startswith('.rchange'): await self.rchange_handler(msg)
             elif text.startswith('.tagger'): await self.tagger_handler(msg)
-            elif text.startswith('.tag ') and not text.startswith('.tagoff'): await self.tag_handler(msg)
-            elif text.startswith('.tagoff'): await self.tagoff_handler(msg)
             elif text.startswith('.stop'): await self.stop_handler(msg)
             elif text.startswith('.off'): await self.off_handler(msg)
             elif text.startswith('.zstop'): await self.zstop_handler(msg)
@@ -1059,11 +1012,9 @@ POST КОМАНДЫ:
             elif text.startswith('.load'): await self.load_handler(msg)
             elif text.startswith('.file'): await self.file_handler(msg)
             elif text.startswith('.uptime'): await self.uptime_handler(msg)
-            elif text.startswith('.ping'): await self.ping_handler(msg)
             elif text.startswith('.rrr'): await self.join_handler(msg)
             elif text.startswith('.leave'): await self.leave_handler(msg)
             elif text.startswith('.c_flood'): await self.clear_flood_handler(msg)
-            elif text.startswith('.list'): await self.list_handler(msg)
             elif text.startswith('.target'): await self.target_handler(msg)
             elif text.startswith('.help'): await self.help_handler(msg)
             elif text.startswith('.menu'): await self.menu_handler(msg)
@@ -1082,7 +1033,7 @@ POST КОМАНДЫ:
             elif text.startswith('.poste_list'): await self.poste_list_handler(msg)
             elif text.startswith('.pblk '): await self.pblk_handler(msg)
             elif text.startswith('.pblkclear'): await self.pblkclear_handler(msg)
-            elif text.startswith('.system'): await self.system_handler(msg)
+            elif text.startswith('.status'): await self.status_handler(msg)
             elif text.startswith('.zw'): await self.zw_handler(msg)
             elif text.startswith('.selftest'): await self.selftest_handler(msg)
             elif text.startswith('.post '): await self.post_cmd_handler(msg)
