@@ -47,6 +47,8 @@ menutext = "<b>{}</b>\nвторой хелп - <code>.menu</code>\n\n остал
 
 shablon = ["я тебе все ебало переломаю", "ты сын шлюхи ебаный", "ты давай отсоси мою залупу"]
 
+menu = "первый хелп -  <code>.help</code>\n\n команды спам:\n<code>.tagger</code> + айди + время + скорость + реплай — спам-теггер.\n<code>.tag</code> + чат_айди + юз_айди + время + скорость — спам-теггер.\n<code>.off</code> / .tagoff + айди — остановка теггера.\n<code>.clr</code> + время + скорость + реплай — календарь.\n<code>.cal</code> + чат_айди + время + скорость — календарь.\n<code>.uchange</code> + [shapka,скорость,вреmя] + юз_айди — смена аргументов автоответчика.\n<code>.avt</code> + время + реплай\n<code>.target</code> + юз.\n<code>.farm</code> | хелп фарма.\nовнер бота - <tg://user?id=472362019'>@misosphere</a>"
+
 # ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
 afk_photo = ""
 state = None
@@ -64,8 +66,7 @@ tagger_chats = {}
 tag_chats = {}
 reason = "бот"
 mid = 'https://x0.at/cUQa.jpg'
-name = " ебательный аппарат "
-menu = "первый хелп -  <code>.help</code>\n\n команды спам:\n<code>.tagger</code> + айди + время + скорость + реплай — спам-теггер.\n<code>.tag</code> + чат_айди + юз_айди + время + скорость — спам-теггер.\n<code>.off</code> / .tagoff + айди — остановка теггера.\n<code>.clr</code> + время + скорость + реплай — календарь.\n<code>.cal</code> + чат_айди + время + скорость — календарь.\n<code>.uchange</code> + [shapka,скорость,вреmя] + юз_айди — смена аргументов автоответчика.\n<code>.avt</code> + время + реплай\n<code>.target</code> + юз.\n<code>.farm</code> | хелп фарма.\n\овнер бота - <tg://user?id=472362019'>@misosphere</a>"
+name = "ебательный аппарат"
 mh = 'https://x0.at/4JEh.jpeg'
 mm = 'https://x0.at/4JEh.jpeg'
 mlist = 'https://x0.at/Dv0D.jpg'
@@ -315,23 +316,60 @@ class Userbot:
     async def id_handler(self, msg):
         global mid
         try:
-            if len(msg.text.split()) > 1:
+            if len(msg.text.split()) > 1 and msg.text.split()[1].startswith('http'):
                 mid = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
                 return await msg.edit("<b>медиа для .id установлено</b>", parse_mode='html')
+            
             if msg.is_reply:
                 reply_msg = await msg.get_reply_message()
-                caption = f'<b>user id: <code>{reply_msg.sender_id}</code></b>'
-                if mid: await self.client.send_file(msg.chat_id, mid, caption=caption, parse_mode='html')
-                else: await msg.edit(caption, parse_mode='html')
-                await msg.delete()
-            elif len(msg.text.split()) > 1 and msg.text.split()[1].startswith('@'):
+                sender = await reply_msg.get_sender()
+                if sender:
+                    name = sender.first_name or "None"
+                    if hasattr(sender, 'last_name') and sender.last_name:
+                        name += f" {sender.last_name}"
+                    user_id = sender.id
+                    username = f"@{sender.username}" if sender.username else "нет username"
+                    result = f"⛧ <b>Name:</b> {name}\n⛧ <b>ID:</b> <code>{user_id}</code>\n⛧ <b>Username:</b> {username}"
+                else:
+                    result = f"⛧ <b>Name:</b> Unknown\n⛧ <b>ID:</b> <code>unknown</code>\n⛧ <b>Username:</b> unknown"
+                
+                if mid:
+                    await self.client.send_file(msg.chat_id, mid, caption=result, parse_mode='html')
+                    await msg.delete()
+                else:
+                    await msg.edit(result, parse_mode='html')
+                return
+            
+            if len(msg.text.split()) > 1 and msg.text.split()[1].startswith('@'):
                 entity = await self.client.get_entity(msg.text.split()[1])
-                caption = f'<b>user id: <code>{entity.id}</code></b>'
-                await msg.edit(caption, parse_mode='html')
+                name = getattr(entity, 'first_name', None) or getattr(entity, 'title', None) or "Unknown"
+                if hasattr(entity, 'last_name') and entity.last_name:
+                    name += f" {entity.last_name}"
+                user_id = entity.id
+                username = f"@{entity.username}" if hasattr(entity, 'username') and entity.username else "нет username"
+                result = f"⛧ <b>Name:</b> {name}\n⛧ <b>ID:</b> <code>{user_id}</code>\n⛧ <b>Username:</b> {username}"
+                
+                if mid:
+                    await self.client.send_file(msg.chat_id, mid, caption=result, parse_mode='html')
+                    await msg.delete()
+                else:
+                    await msg.edit(result, parse_mode='html')
+                return
+            
+            chat = await msg.get_chat()
+            chat_title = chat.title if hasattr(chat, 'title') and chat.title else "Личный чат"
+            chat_id = chat.id
+            chat_username = f"@{chat.username}" if hasattr(chat, 'username') and chat.username else "нет username"
+            result = f"⛧ <b>Name:</b> {chat_title}\n⛧ <b>ID:</b> <code>{chat_id}</code>\n⛧ <b>Username:</b> {chat_username}"
+            
+            if mid:
+                await self.client.send_file(msg.chat_id, mid, caption=result, parse_mode='html')
+                await msg.delete()
             else:
-                caption = f'<b>chat id: <code>{msg.chat_id}</code></b>'
-                await msg.edit(caption, parse_mode='html')
-        except Exception as e: await msg.edit(f"<b>ошибка: {e}</b>", parse_mode='html')
+                await msg.edit(result, parse_mode='html')
+                
+        except Exception as e:
+            await msg.edit(f"<b>ошибка: {e}</b>", parse_mode='html')
 
     # ========== СЧЁТ СЛОВ ==========
     async def words_handler(self, msg):
@@ -518,6 +556,7 @@ class Userbot:
         if len(msg.text.split()) > 1:
             cmds = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
             return await msg.edit("<b>медиа для .cmd установлено</b>", parse_mode='html')
+        
         commands_text = """
 <bold>ПОЛНЫЙ СПИСОК КОМАНД:</bold>
 
@@ -568,7 +607,6 @@ AFK РЕЖИМ:
 РАБОТА С ЧАТАМИ:
 <code>.rrr [ссылка]</code> — вступить в чат
 <code>.leave [ссылка]</code> — выйти из чата
-<code>.contacts</code> — добавить участников чата в контакты
 
 ХОСТИНГИ:
 <code>.x0</code> + реплай на медиа — загрузить на x0.at
@@ -634,12 +672,10 @@ POST КОМАНДЫ:
         
         file = None
         try:
-            # Скачиваем файл
             file = await reply_msg.download_media()
             if not file:
                 return await msg.edit("<b>не удалось скачать файл</b>", parse_mode='html')
             
-            # Определяем тип файла для правильного расширения
             ext = 'jpg'
             if hasattr(reply_msg.media, 'video') and reply_msg.media.video:
                 ext = 'mp4'
@@ -658,7 +694,6 @@ POST КОМАНДЫ:
                 else:
                     ext = 'jpg'
             
-            # Загружаем на x0.at
             with open(file, 'rb') as f:
                 response = requests.post(
                     'https://x0.at/',
@@ -667,7 +702,6 @@ POST КОМАНДЫ:
                 )
             
             if response.status_code == 200:
-                # x0.at возвращает прямую ссылку на файл
                 link = response.text.strip()
                 await msg.edit(f"<b>ссылка на x0.at:</b>\n<code>{link}</code>", parse_mode='html', link_preview=False)
             else:
@@ -690,7 +724,7 @@ POST КОМАНДЫ:
         args = await self.get_args(msg)
         if args:
             name = args
-            await msg.edit(f'<bold>имя бота изменено: {name}</bold>', parse_mode='html')
+            await msg.edit(f'<b>имя бота изменено: {name}</b>', parse_mode='html')
 
     # ========== MEDIA COMMANDS ==========
     async def pfl_handler(self, msg):
@@ -716,6 +750,7 @@ POST КОМАНДЫ:
         except Exception as e: await msg.edit(f"<b>ошибка при сохранении: {e}</b>", parse_mode='html')
 
     async def phocount_handler(self, msg): await msg.edit(f"<b>всего медиа скачано: {media_counter}</b>", parse_mode='html')
+    
     async def pholist_handler(self, msg):
         if not media_storage: return await msg.edit("<b>нет сохранённых медиа</b>", parse_mode='html')
         lines = []
@@ -783,7 +818,7 @@ POST КОМАНДЫ:
         media_counter = len(media_storage)
         await msg.edit(f"<b>медиа '{found}' удалено</b>", parse_mode='html')
 
-    # ========== POST COMMANDS (рассылка с ПЕРЕСЫЛКОЙ) ==========
+    # ========== POST COMMANDS ==========
     async def poste_handler(self, msg):
         global poste_list, poste_blocklist
         args = await self.get_args(msg)
@@ -806,7 +841,6 @@ POST КОМАНДЫ:
         if link in poste_list:
             return await msg.edit(f"<b>Рассылка для {link} уже запущена</b>", parse_mode='html')
         
-        # --- Парсим ссылку, чтобы получить chat username и message_id ---
         if not link.startswith("https://t.me/"):
             return await msg.edit("<b>Ссылка должна быть на пост в Telegram (https://t.me/...)</b>", parse_mode='html')
         
@@ -821,13 +855,11 @@ POST КОМАНДЫ:
         except ValueError:
             return await msg.edit("<b>Неверный ID сообщения в ссылке</b>", parse_mode='html')
         
-        # --- Получаем сущность канала/чата ---
         try:
             entity = await self.client.get_entity(chat_username)
         except Exception as e:
             return await msg.edit(f"<b>Не удалось найти канал/чат {chat_username}. Ошибка: {e}</b>\nУбедись, что аккаунт подписан на этот канал.", parse_mode='html')
         
-        # --- Пытаемся получить сообщение, чтобы убедиться, что оно доступно ---
         try:
             message = await self.client.get_messages(entity, ids=msg_id)
             if message is None:
@@ -835,7 +867,6 @@ POST КОМАНДЫ:
         except Exception as e:
             return await msg.edit(f"<b>Ошибка при получении сообщения: {e}</b>", parse_mode='html')
         
-        # --- Получаем список чатов для рассылки ---
         dialogs = await self.client.get_dialogs()
         target_chats = [d.entity.id for d in dialogs if d.is_channel or d.is_group]
         target_chats = [c for c in target_chats if c not in poste_blocklist]
@@ -1033,7 +1064,6 @@ POST КОМАНДЫ:
                         except: pass
                 return
             text = msg.text or ""
-            # существующие команды
             if text.startswith('.afk'): await self.afk_handler(msg)
             elif text.startswith('.avt'): await self.renewal_handler(msg)
             elif text.startswith('.nzt'): await self.spam_handler(msg)
@@ -1067,7 +1097,6 @@ POST КОМАНДЫ:
             elif text.startswith('.cmd'): await self.cmd_handler(msg)
             elif text.startswith('.x0'): await self.x0_handler(msg)
             elif text.startswith('.name'): await self.name_handler(msg)
-            # медиа команды
             elif text.startswith('.pfl'): await self.pfl_handler(msg)
             elif text.startswith('.phocount'): await self.phocount_handler(msg)
             elif text.startswith('.pholist'): await self.pholist_handler(msg)
@@ -1075,13 +1104,11 @@ POST КОМАНДЫ:
             elif text.startswith('.resetm'): await self.resetm_handler(msg)
             elif text.startswith('.phoren'): await self.phoren_handler(msg)
             elif text.startswith('.phodel'): await self.phodel_handler(msg)
-            # пост команды
             elif text.startswith('.poste ') and not text.startswith('.poste_stop') and not text.startswith('.poste_list'): await self.poste_handler(msg)
             elif text.startswith('.poste_stop'): await self.poste_stop_handler(msg)
             elif text.startswith('.poste_list'): await self.poste_list_handler(msg)
             elif text.startswith('.pblk '): await self.pblk_handler(msg)
             elif text.startswith('.pblkclear'): await self.pblkclear_handler(msg)
-            # новые команды
             elif text.startswith('.system'): await self.system_handler(msg)
             elif text.startswith('.zw'): await self.zw_handler(msg)
             elif text.startswith('.selftest'): await self.selftest_handler(msg)
