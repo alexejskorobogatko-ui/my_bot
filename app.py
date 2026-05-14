@@ -13,6 +13,7 @@ from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelReque
 from telethon.tl.functions.messages import ImportChatInviteRequest
 from telethon.tl.types import InputPhoneContact
 from telethon.tl.functions.contacts import ImportContactsRequest
+from telethon.network.connection import ConnectionTcpMTPRIntermediate
 import psutil
 
 # ========== ВЕБ-ОБЁРТКА ДЛЯ RENDER ==========
@@ -70,7 +71,7 @@ class Userbot():
             'session',
             API_ID,
             API_HASH,
-            connection=ConnectionTcpMTProxyRandomizedIntermediate,
+            connection=ConnectionTcpMTPRIntermediate,
             proxy=self.proxy
         )
         self.droch_active = False
