@@ -520,8 +520,99 @@ class Userbot:
             return await msg.edit("<b>медиа для .cmd установлено</b>", parse_mode='html')
         commands_text = """
 <bold>ПОЛНЫЙ СПИСОК КОМАНД:</bold>
-...
-(тут текст команд, но я сокращаю для краткости, оставь как было у тебя)
+
+ОСНОВНЫЕ КОМАНДЫ:
+<code>.help</code> — главное меню
+<code>.menu</code> — второе меню
+<code>.cmd</code> — этот список команд
+<code>.id</code> — узнать chat id / user id
+<code>.ping</code> — проверить пинг бота
+<code>.uptime</code> — аптайм бота
+<code>.name</code> + текст — изменить имя бота
+
+AFK РЕЖИМ:
+<code>.afk 1</code> — включить AFK
+<code>.afk 2</code> — выключить AFK
+<code>.afk [причина]</code> — установить причину
+<code>.afk [ссылка]</code> — установить медиа для AFK
+
+АВТООТВЕТЧИК (на пользователя):
+<code>.nrc [время] [медиа] [шапка]</code> + реплай — включить автоответ
+<code>.nrcc [id]</code> — выключить автоответ
+<code>.rchange shapka [id] [текст]</code> — сменить шапку
+<code>.rchange time [id] [секунды]</code> — сменить задержку
+<code>.rchange media [id] [ссылка]</code> — сменить медиа
+
+СПАМ В ЧАТЕ (reply):
+<code>.avt [время] [медиа] [шапка]</code> + реплай — спам в чат
+<code>.stop [chat_id]</code> — остановить спам
+
+СПАМ В ДРУГОЙ ЧАТ:
+<code>.nzt [chat_id] [время] [медиа] [шапка]</code> — спам в другой чат
+<code>.rstop [chat_id]</code> — остановить
+
+КАЛЕНДАРЬ (отложенный спам):
+<code>.clr [время] [медиа] [шапка]</code> + реплай — календарь
+<code>.cal [chat_id] [время] [медиа] [шапка]</code> — календарь в другой чат
+
+ТЕГГЕРЫ:
+<code>.tagger [user_id] [время] [медиа] [текст]</code> + реплай — теггер
+<code>.tag [chat_id] [user_id] [время] [медиа] [текст]</code> — теггер в другой чат
+<code>.off [chat_id]</code> — остановить tagger
+<code>.tagoff [chat_id]</code> — остановить tag
+
+РАБОТА С ШАБЛОНАМИ:
+<code>.load</code> + реплай на файл — загрузить свой шаблон
+<code>.file</code> — выгрузить текущий шаблон
+
+РАБОТА С ЧАТАМИ:
+<code>.rrr [ссылка]</code> — вступить в чат
+<code>.leave [ссылка]</code> — выйти из чата
+<code>.contacts</code> — добавить участников чата в контакты
+
+ХОСТИНГИ:
+<code>.x0</code> + реплай на медиа — загрузить на catbox.moe
+
+ФАРМ (для игры):
+<code>.farm</code> — меню фарма
+<code>.дроч старт / стоп</code> — авто-дроч (11 минут)
+<code>.фарма старт / стоп</code> — авто-фарма (4 часа 5 минут)
+
+ДРУГИЕ КОМАНДЫ:
+<code>.words</code> + реплай — подсчёт слов/символов
+<code>.list</code> — список активных процессов
+<code>.c_flood</code> — отключить все флудилки
+<code>.target [username/id]</code> — установить цель для авто-удаления
+
+МЕДИА ДЛЯ КОМАНД:
+<code>.help [ссылка]</code> — установить медиа для .help
+<code>.menu [ссылка]</code> — установить медиа для .menu
+<code>.cmd [ссылка]</code> — установить медиа для .cmd
+<code>.list [ссылка]</code> — установить медиа для .list
+<code>.id [ссылка]</code> — установить медиа для .id
+
+МЕДИА КОМАНДЫ:
+<code>.pfl [имя]</code> — ответом на фото, видео или m4a скачать и сделать активным
+<code>.phocount</code> — сколько всего медиа скачано
+<code>.pholist</code> — список медиа и активное
+<code>.phoset номер|имя 1|2</code> — поменять активное медиа (1=основное, 2=hntd)
+<code>.resetm 1|2</code> — сбросить выбранное медиа на фото профиля
+<code>.phoren старый новый</code> — переименовать номер медиа
+<code>.phodel номер|имя</code> — удалить медиа
+
+POST КОМАНДЫ:
+<code>.poste 'ссылка' минуты</code> — пересылка поста в группы
+<code>.poste_stop</code> — остановить все рассылки
+<code>.poste_stop ссылка</code> — остановить по ссылке
+<code>.poste_list</code> — список активных рассылок
+<code>.pblk list</code> — список групп из блок-листа
+<code>.pblk add id</code> / del id / clear — блок-лист пересылки
+<code>.pblkclear</code> — полностью очистить весь pblk list
+
+СИСТЕМНЫЕ КОМАНДЫ:
+<code>.status</code> — статус работы функций
+<code>.zw</code> — остановить все функции
+<code>.selftest</code> — проверка работоспособности всех функций
 """
         if cmds:
             try:
@@ -650,28 +741,75 @@ class Userbot:
         media_counter = len(media_storage)
         await msg.edit(f"<b>медиа '{found}' удалено</b>", parse_mode='html')
 
-    # ========== POST COMMANDS (рассылка с ПЕРЕСЫЛКОЙ) ==========
+    # ========== POST COMMANDS (рассылка с ПЕРЕСЫЛКОЙ - ИСПРАВЛЕНА) ==========
     async def poste_handler(self, msg):
         global poste_list, poste_blocklist
         args = await self.get_args(msg)
-        if not args: return await msg.edit("<b>использование: .poste ссылка минуты</b>", parse_mode='html')
+        if not args:
+            return await msg.edit("<b>Использование: .poste ссылка_на_пост минуты</b>", parse_mode='html')
+        
         parts = args.split()
-        if len(parts) < 2: return await msg.edit("<b>укажи ссылку и интервал (минуты)</b>", parse_mode='html')
+        if len(parts) < 2:
+            return await msg.edit("<b>Укажи ссылку на пост и интервал (минуты)</b>", parse_mode='html')
+        
         link, interval = parts[0], parts[1]
-        try: interval = int(interval)
-        except: return await msg.edit("<b>интервал должен быть числом</b>", parse_mode='html')
-        if interval < 1: return await msg.edit("<b>интервал не может быть меньше 1 минуты</b>", parse_mode='html')
-        if link in poste_list: return await msg.edit(f"<b>рассылка для {link} уже запущена</b>", parse_mode='html')
-        # получаем сущность поста для пересылки
         try:
-            entity = await self.client.get_entity(link)
-            post_entity = entity
-        except Exception as e: return await msg.edit(f"<b>не удалось получить пост: {e}</b>", parse_mode='html')
+            interval = int(interval)
+        except ValueError:
+            return await msg.edit("<b>Интервал должен быть числом</b>", parse_mode='html')
+        
+        if interval < 1:
+            return await msg.edit("<b>Интервал не может быть меньше 1 минуты</b>", parse_mode='html')
+        
+        if link in poste_list:
+            return await msg.edit(f"<b>Рассылка для {link} уже запущена</b>", parse_mode='html')
+        
+        # --- Парсим ссылку, чтобы получить chat username и message_id ---
+        if not link.startswith("https://t.me/"):
+            return await msg.edit("<b>Ссылка должна быть на пост в Telegram (https://t.me/...)</b>", parse_mode='html')
+        
+        path = link.replace("https://t.me/", "").split("?")[0]
+        parts_path = path.split("/")
+        if len(parts_path) != 2:
+            return await msg.edit("<b>Неверный формат ссылки. Нужно: https://t.me/username/12345</b>", parse_mode='html')
+        
+        chat_username, msg_id_str = parts_path[0], parts_path[1]
+        try:
+            msg_id = int(msg_id_str)
+        except ValueError:
+            return await msg.edit("<b>Неверный ID сообщения в ссылке</b>", parse_mode='html')
+        
+        # --- Получаем сущность канала/чата ---
+        try:
+            entity = await self.client.get_entity(chat_username)
+        except Exception as e:
+            return await msg.edit(f"<b>Не удалось найти канал/чат {chat_username}. Ошибка: {e}</b>\nУбедись, что аккаунт подписан на этот канал.", parse_mode='html')
+        
+        # --- Пытаемся получить сообщение, чтобы убедиться, что оно доступно ---
+        try:
+            message = await self.client.get_messages(entity, ids=msg_id)
+            if message is None:
+                return await msg.edit(f"<b>Не удалось найти сообщение {msg_id} в {chat_username}.\nПроверь ссылку и доступ к каналу.</b>", parse_mode='html')
+        except Exception as e:
+            return await msg.edit(f"<b>Ошибка при получении сообщения: {e}</b>", parse_mode='html')
+        
+        # --- Получаем список чатов для рассылки ---
         dialogs = await self.client.get_dialogs()
         target_chats = [d.entity.id for d in dialogs if d.is_channel or d.is_group]
         target_chats = [c for c in target_chats if c not in poste_blocklist]
-        poste_list[link] = {'chats': target_chats, 'interval': interval, 'running': True, 'post_entity': post_entity}
-        await msg.edit(f"<b>рассылка (пересылка) запущена: {link}\nинтервал: {interval} мин\nчатов: {len(target_chats)}\nостановить: .poste_stop {link}</b>", parse_mode='html')
+        
+        if not target_chats:
+            return await msg.edit("<b>Нет доступных чатов для рассылки (бот не состоит ни в одном канале/группе).</b>", parse_mode='html')
+        
+        poste_list[link] = {
+            'chats': target_chats,
+            'interval': interval,
+            'running': True,
+            'entity': entity,
+            'msg_id': msg_id
+        }
+        
+        await msg.edit(f"<b>Рассылка (пересылка) запущена:\nСсылка: {link}\nИнтервал: {interval} мин\nЧатов: {len(target_chats)}\nОстановить: .poste_stop {link}</b>", parse_mode='html')
         asyncio.create_task(self._poste_worker(link))
 
     async def _poste_worker(self, link):
@@ -679,12 +817,15 @@ class Userbot:
         while poste_list.get(link, {}).get('running', False):
             data = poste_list[link]
             for chat_id in data['chats']:
-                if not poste_list.get(link, {}).get('running', False): break
+                if not poste_list.get(link, {}).get('running', False):
+                    break
                 try:
-                    await self.client.forward_messages(chat_id, messages=data['post_entity'], from_peer=data['post_entity'].chat_id if hasattr(data['post_entity'], 'chat_id') else data['post_entity'].id)
+                    await self.client.forward_messages(chat_id, messages=data['msg_id'], from_peer=data['entity'])
                     await asyncio.sleep(2)
-                except FloodWaitError as e: await asyncio.sleep(e.seconds)
-                except Exception: pass
+                except FloodWaitError as e:
+                    await asyncio.sleep(e.seconds)
+                except Exception:
+                    pass
             await asyncio.sleep(data['interval'] * 60)
 
     async def poste_stop_handler(self, msg):
@@ -746,6 +887,7 @@ class Userbot:
         if len(msg.text.split()) > 1:
             system_media = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
             return await msg.edit("<b>медиа для .system установлено</b>", parse_mode='html')
+        me = await self.client.get_me()
         status_text = f"""
 <bold>статус работы функций:</bold>
 
@@ -759,6 +901,11 @@ class Userbot:
 рассылки (poste): {len(poste_list)} активных
 блок-лист (pblk): {len(poste_blocklist)} чатов
 цель (target): {self.target_user if self.target_user else 'не установлена'}
+
+--- аккаунт ---
+имя: {me.first_name}
+юзернейм: @{me.username}
+айди: {me.id}
 """
         await self.reply_with_media(msg, system_media, status_text)
 
@@ -796,7 +943,7 @@ class Userbot:
         post_text = """
 <bold>POST КОМАНДЫ:</bold>
 
-<code>.poste 'ссылка' минуты</code> — пересылка поста в группы
+<code>.poste ссылка_на_пост минуты</code> — пересылка поста в группы
 <code>.poste_stop</code> — остановить все рассылки
 <code>.poste_stop ссылка</code> — остановить по ссылке
 <code>.poste_list</code> — список активных рассылок
