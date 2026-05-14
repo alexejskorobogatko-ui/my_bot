@@ -1,5 +1,2 @@
 telethon
 flask
-psutil
-requests
-python-socks[asyncio]
