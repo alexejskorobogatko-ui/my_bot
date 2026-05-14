@@ -14,7 +14,7 @@ from flask import Flask
 from telethon import TelegramClient, events
 from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelRequest
 from telethon.tl.functions.messages import ImportChatInviteRequest
-from telethon.tl.types import InputPhoneContact
+from telethon.tl.types import InputPhoneContact, Channel
 from telethon.tl.functions.contacts import ImportContactsRequest
 from telethon.errors import FloodWaitError
 
@@ -47,7 +47,7 @@ menutext = "<b>{}</b>\nвторой хелп - <code>.menu</code>\n\n остал
 
 shablon = ["я тебе все ебало переломаю", "ты сын шлюхи ебаный", "ты давай отсоси мою залупу"]
 
-menu = "первый хелп -  <code>.help</code>\n\n команды спам:\n<code>.tagger</code> + айди + время + скорость + реплай — спам-теггер.\n<code>.tag</code> + чат_айди + юз_айди + время + скорость — спам-теггер.\n<code>.off</code> / .tagoff + айди — остановка теггера.\n<code>.clr</code> + время + скорость + реплай — календарь.\n<code>.cal</code> + чат_айди + время + скорость — календарь.\n<code>.uchange</code> + [shapka,скорость,вреmя] + юз_айди — смена аргументов автоответчика.\n<code>.avt</code> + время + реплай\n<code>.target</code> + юз.\n<code>.farm</code> | хелп фарма.\nовнер бота - <tg://user?id=472362019'>@misosphere</a>"
+menu = "первый хелп -  <code>.help</code>\n\n команды спам:\n<code>.tagger</code> + айди + время + скорость + реплай — спам-теггер.\n<code>.tag</code> + чат_айди + юз_айди + время + скорость — спам-теггер.\n<code>.off</code> / .tagoff + айди — остановка теггера.\n<code>.clr</code> + время + скорость + реплай — календарь.\n<code>.cal</code> + чат_айди + время + скорость — календарь.\n<code>.uchange</code> + [shapka,скорость,вреmя] + юз_айди — смена аргументов автоответчика.\n<code>.avt</code> + время + реплай\n<code>.target</code> + юз.\nовнер бота - <tg://user?id=472362019'>@misosphere</a>"
 
 # ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
 afk_photo = ""
@@ -89,8 +89,6 @@ media_cmd_media = None
 class Userbot:
     def __init__(self, session_name, api_id, api_hash):
         self.client = TelegramClient(session_name, api_id, api_hash)
-        self.droch_active = False
-        self.pharma_active = False
         self.target_user = None
 
     async def get_args(self, msg):
@@ -109,6 +107,20 @@ class Userbot:
                 await msg.edit(caption, parse_mode='html')
         else:
             await msg.edit(caption, parse_mode='html')
+
+    async def is_admin_in_group(self, chat_id):
+        """Проверяет, является ли аккаунт администратором в группе/супергруппе (не в канале)"""
+        try:
+            chat = await self.client.get_entity(chat_id)
+            # Пропускаем каналы и личные чаты
+            if isinstance(chat, Channel):
+                if chat.broadcast:  # это канал, не группа
+                    return False
+            # Проверяем права
+            full_chat = await self.client.get_permissions(chat_id)
+            return full_chat.is_admin
+        except:
+            return False
 
     # ========== WATCHER ==========
     async def watcher(self, msg):
@@ -478,50 +490,6 @@ class Userbot:
             await msg.edit(f"цель: <code>{self.target_user}</code>", parse_mode='html')
         else: await msg.edit("<b>укажи юзернейм или ID</b>", parse_mode='html')
 
-    # ========== ДРОЧ ==========
-    async def droch_handler(self, msg, action):
-        if action == "старт":
-            if self.droch_active: return await msg.edit("<b>уже фармлю!</b>", parse_mode='html')
-            self.droch_active = True
-            await msg.edit("<b>запущен цикл: 11 минут</b>", parse_mode='html')
-            await asyncio.sleep(2); await msg.delete()
-            while self.droch_active:
-                try:
-                    m = await self.client.send_message(msg.chat_id, "дроч")
-                    await asyncio.sleep(5)
-                    await m.delete()
-                    await asyncio.sleep(660)
-                except: self.droch_active = False; break
-        elif action == "стоп":
-            self.droch_active = False
-            await msg.edit("<b>авто-дроч остановлен</b>", parse_mode='html')
-
-    # ========== ФАРМА ==========
-    async def pharma_handler(self, msg, action):
-        if action == "старт":
-            if self.pharma_active: return await msg.edit("<b>ошибка: фарма уже запущена</b>", parse_mode='html')
-            self.pharma_active = True
-            await msg.edit("<b>авто-фарма запущена. интервал: 4 часа 5 минут</b>", parse_mode='html')
-            await asyncio.sleep(2); await msg.delete()
-            while self.pharma_active:
-                try:
-                    m = await self.client.send_message(msg.chat_id, "фарма")
-                    await asyncio.sleep(5)
-                    await m.delete()
-                    await asyncio.sleep(14700)
-                except: self.pharma_active = False; break
-        elif action == "стоп":
-            self.pharma_active = False
-            await msg.edit("<b>авто-фарма остановлена</b>", parse_mode='html')
-
-    async def farm_menu_handler(self, msg):
-        st_d = "работает" if self.droch_active else "выключен"
-        st_f = "работает" if self.pharma_active else "выключен"
-        farm_text = (f"<b>меню фарма</b>\n\n<code>.дроч старт</code> — запустить авто-дроч\n"
-                     f"<code>.дроч стоп</code> — остановить\n\n<code>.фарма старт</code> — запустить авто-фарма\n"
-                     f"<code>.фарма стоп</code> — остановить\n\nСтатус дроча: <b>{st_d}</b>\nСтатус фарма: <b>{st_f}</b>")
-        await msg.edit(farm_text, parse_mode='html')
-
     # ========== HELP ==========
     async def help_handler(self, msg):
         global mh, name
@@ -611,11 +579,6 @@ AFK РЕЖИМ:
 ХОСТИНГИ:
 <code>.x0</code> + реплай на медиа — загрузить на x0.at
 
-ФАРМ (для игры):
-<code>.farm</code> — меню фарма
-<code>.дроч старт / стоп</code> — авто-дроч (11 минут)
-<code>.фарма старт / стоп</code> — авто-фарма (4 часа 5 минут)
-
 ДРУГИЕ КОМАНДЫ:
 <code>.words</code> + реплай — подсчёт слов/символов
 <code>.list</code> — список активных процессов
@@ -639,7 +602,7 @@ AFK РЕЖИМ:
 <code>.phodel номер|имя</code> — удалить медиа
 
 POST КОМАНДЫ:
-<code>.poste 'ссылка' минуты</code> — пересылка поста в группы
+<code>.poste 'ссылка' минуты</code> — пересылка поста в группы (только где аккаунт админ)
 <code>.poste_stop</code> — остановить все рассылки
 <code>.poste_stop ссылка</code> — остановить по ссылке
 <code>.poste_list</code> — список активных рассылок
@@ -659,7 +622,7 @@ POST КОМАНДЫ:
             except: await msg.edit(commands_text, parse_mode='html')
         else: await msg.edit(commands_text, parse_mode='html')
 
-    # ========== X0 (ЗАГРУЗКА НА x0.at) ==========
+    # ========== X0 ==========
     async def x0_handler(self, msg):
         if not msg.is_reply:
             return await msg.edit("<b>нужен реплай на медиа</b>", parse_mode='html')
@@ -818,7 +781,7 @@ POST КОМАНДЫ:
         media_counter = len(media_storage)
         await msg.edit(f"<b>медиа '{found}' удалено</b>", parse_mode='html')
 
-    # ========== POST COMMANDS ==========
+    # ========== POST COMMANDS (только группы где админ) ==========
     async def poste_handler(self, msg):
         global poste_list, poste_blocklist
         args = await self.get_args(msg)
@@ -867,12 +830,30 @@ POST КОМАНДЫ:
         except Exception as e:
             return await msg.edit(f"<b>Ошибка при получении сообщения: {e}</b>", parse_mode='html')
         
+        # Получаем все диалоги
         dialogs = await self.client.get_dialogs()
-        target_chats = [d.entity.id for d in dialogs if d.is_channel or d.is_group]
-        target_chats = [c for c in target_chats if c not in poste_blocklist]
+        target_chats = []
+        
+        for d in dialogs:
+            # Проверяем, что это группа/супергруппа (не канал и не личный чат)
+            is_group = d.is_group or d.is_channel and not d.entity.broadcast
+            if not is_group:
+                continue
+            
+            # Пропускаем заблокированные
+            if d.entity.id in poste_blocklist:
+                continue
+            
+            # Проверяем, является ли аккаунт админом
+            try:
+                permissions = await self.client.get_permissions(d.entity.id)
+                if permissions.is_admin:
+                    target_chats.append(d.entity.id)
+            except:
+                pass
         
         if not target_chats:
-            return await msg.edit("<b>Нет доступных чатов для рассылки (бот не состоит ни в одном канале/группе).</b>", parse_mode='html')
+            return await msg.edit("<b>Нет доступных групп, где аккаунт является администратором.</b>", parse_mode='html')
         
         poste_list[link] = {
             'chats': target_chats,
@@ -882,7 +863,7 @@ POST КОМАНДЫ:
             'msg_id': msg_id
         }
         
-        await msg.edit(f"<b>Рассылка (пересылка) запущена:\nСсылка: {link}\nИнтервал: {interval} мин\nЧатов: {len(target_chats)}\nОстановить: .poste_stop {link}</b>", parse_mode='html')
+        await msg.edit(f"<b>Рассылка (пересылка) запущена только для групп, где аккаунт админ:\nСсылка: {link}\nИнтервал: {interval} мин\nЧатов: {len(target_chats)}\nОстановить: .poste_stop {link}</b>", parse_mode='html')
         asyncio.create_task(self._poste_worker(link))
 
     async def _poste_worker(self, link):
@@ -969,8 +950,6 @@ POST КОМАНДЫ:
 теггер (tagger): {len(tagger_chats)} активных
 теггер (tag): {len(tag_chats)} активных
 автоответчик: {len(autoreply_list)} пользователей
-авто-дроч: {'включен' if self.droch_active else 'выключен'}
-авто-фарма: {'включена' if self.pharma_active else 'выключена'}
 рассылки (poste): {len(poste_list)} активных
 блок-лист (pblk): {len(poste_blocklist)} чатов
 цель (target): {self.target_user if self.target_user else 'не установлена'}
@@ -985,7 +964,6 @@ POST КОМАНДЫ:
     async def zw_handler(self, msg):
         global spam_state, spam_state1, tagger_chats, tag_chats, autoreply_list, poste_list
         spam_state.clear(); spam_state1.clear(); tagger_chats.clear(); tag_chats.clear(); autoreply_list.clear()
-        self.droch_active = False; self.pharma_active = False
         for link in poste_list: poste_list[link]['running'] = False
         poste_list.clear()
         await msg.edit("<bold>все функции остановлены</bold>", parse_mode='html')
@@ -1016,7 +994,7 @@ POST КОМАНДЫ:
         post_text = """
 <bold>POST КОМАНДЫ:</bold>
 
-<code>.poste ссылка_на_пост минуты</code> — пересылка поста в группы
+<code>.poste ссылка_на_пост минуты</code> — пересылка поста в группы (только где аккаунт админ)
 <code>.poste_stop</code> — остановить все рассылки
 <code>.poste_stop ссылка</code> — остановить по ссылке
 <code>.poste_list</code> — список активных рассылок
@@ -1087,11 +1065,6 @@ POST КОМАНДЫ:
             elif text.startswith('.c_flood'): await self.clear_flood_handler(msg)
             elif text.startswith('.list'): await self.list_handler(msg)
             elif text.startswith('.target'): await self.target_handler(msg)
-            elif text.startswith('.дроч старт'): await self.droch_handler(msg, "старт")
-            elif text.startswith('.дроч стоп'): await self.droch_handler(msg, "стоп")
-            elif text.startswith('.фарма старт'): await self.pharma_handler(msg, "старт")
-            elif text.startswith('.фарма стоп'): await self.pharma_handler(msg, "стоп")
-            elif text.startswith('.farm'): await self.farm_menu_handler(msg)
             elif text.startswith('.help'): await self.help_handler(msg)
             elif text.startswith('.menu'): await self.menu_handler(msg)
             elif text.startswith('.cmd'): await self.cmd_handler(msg)
