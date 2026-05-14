@@ -4,6 +4,19 @@ import threading
 from flask import Flask
 from telethon import TelegramClient
 
+PHONE = os.environ.get("PHONE")
+API_ID = int(os.environ.get("API_ID", 30843796))
+API_HASH = os.environ.get("API_HASH", '535bed75aaa17ed391bc11e1dac2cb21')
+
+client = TelegramClient('session', API_ID, API_HASH)
+
+async def main():
+    await client.start(phone=PHONE)
+    print("✅ Бот авторизован!")
+    me = await client.get_me()
+    print(f"👤 {me.first_name}")
+    await client.run_until_disconnected()
+
 app = Flask(__name__)
 
 @app.route('/')
