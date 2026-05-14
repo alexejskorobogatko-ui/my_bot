@@ -13,7 +13,6 @@ from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelReque
 from telethon.tl.functions.messages import ImportChatInviteRequest
 from telethon.tl.types import InputPhoneContact
 from telethon.tl.functions.contacts import ImportContactsRequest
-from telethon.network.connection import ConnectionTcpMTPRIntermediate
 import psutil
 
 # ========== ВЕБ-ОБЁРТКА ДЛЯ RENDER ==========
@@ -26,13 +25,6 @@ def health():
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
-
-# ========== ДАННЫЕ ==========
-API_ID = 30843796
-API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
-PROXY_HOST = '34.155.219.84'
-PROXY_PORT = 443
-PROXY_SECRET = 'dd3c86e0fe7e219f586a4a23b9cc388ed9'
 
 # ========== ТЕКСТЫ ==========
 menutext = "<b>{}</b>\nвторой хелп - <code>.menu</code>\n\n остальные команды:\n<code>.list</code> + медия — список работы бота.\n<code>.help</code> + медия — mеnю.\n<code>.menu</code> — второе меню.\n<code>.words</code> + репл — количество слов в сообщении.\n<code>.load</code> + репл — смена шаблов бота.\n<code>.file</code> — основной шаблон бота.\n<code>.uptime</code> — аптайм.\n<code>.ping</code> — пинг.\n<code>.id</code> — узнать чат /юз айди\n<code>.x0</code> + репл — загрузить медию на хостинг\n\nthis chat id: <code>{}</code>\nyour user id: <code>{}</code>\nyour name: <code>{}</code>\nyour username: @{}</b>\nbot owner — <a href='.'>@misosphere</a></b>"
@@ -66,14 +58,7 @@ cmds = 'https://x0.at/Dv0D.jpg'
 # ========== КЛАСС ЮЗЕРБОТА ==========
 class Userbot():
     def __init__(self):
-        self.proxy = (PROXY_HOST, PROXY_PORT, PROXY_SECRET)
-        self.client = TelegramClient(
-            'session',
-            API_ID,
-            API_HASH,
-            connection=ConnectionTcpMTPRIntermediate,
-            proxy=self.proxy
-        )
+        self.client = TelegramClient('session', API_ID, API_HASH)
         self.droch_active = False
         self.pharma_active = False
         self.target_user = None
