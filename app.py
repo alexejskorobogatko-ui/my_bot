@@ -571,7 +571,7 @@ AFK РЕЖИМ:
 <code>.contacts</code> — добавить участников чата в контакты
 
 ХОСТИНГИ:
-<code>.x0</code> + реплай на медиа — загрузить на catbox.moe
+<code>.x0</code> + реплай на медиа — загрузить на x0.at
 
 ФАРМ (для игры):
 <code>.farm</code> — меню фарма
@@ -621,26 +621,68 @@ POST КОМАНДЫ:
             except: await msg.edit(commands_text, parse_mode='html')
         else: await msg.edit(commands_text, parse_mode='html')
 
-    # ========== X0 ==========
+    # ========== X0 (ЗАГРУЗКА НА x0.at) ==========
     async def x0_handler(self, msg):
-        if not msg.is_reply: return await msg.edit("<b>нужен реплай на медиа</b>", parse_mode='html')
+        if not msg.is_reply:
+            return await msg.edit("<b>нужен реплай на медиа</b>", parse_mode='html')
+        
         reply_msg = await msg.get_reply_message()
-        if not reply_msg.media: return await msg.edit("<b>нет медиа</b>", parse_mode='html')
-        await msg.edit("<b>загружаю на catbox.moe...</b>", parse_mode='html')
+        if not reply_msg.media:
+            return await msg.edit("<b>нет медиа</b>", parse_mode='html')
+        
+        await msg.edit("<b>загружаю на x0.at...</b>", parse_mode='html')
+        
         file = None
         try:
+            # Скачиваем файл
             file = await reply_msg.download_media()
-            if not file: return await msg.edit("<b>не удалось скачать файл</b>", parse_mode='html')
+            if not file:
+                return await msg.edit("<b>не удалось скачать файл</b>", parse_mode='html')
+            
+            # Определяем тип файла для правильного расширения
+            ext = 'jpg'
+            if hasattr(reply_msg.media, 'video') and reply_msg.media.video:
+                ext = 'mp4'
+            elif hasattr(reply_msg.media, 'audio') and reply_msg.media.audio:
+                ext = 'm4a'
+            elif hasattr(reply_msg.media, 'document') and reply_msg.media.document:
+                mime = reply_msg.media.document.mime_type
+                if 'video' in mime:
+                    ext = 'mp4'
+                elif 'audio' in mime:
+                    ext = 'm4a'
+                elif 'gif' in mime:
+                    ext = 'gif'
+                elif 'png' in mime:
+                    ext = 'png'
+                else:
+                    ext = 'jpg'
+            
+            # Загружаем на x0.at
             with open(file, 'rb') as f:
-                response = requests.post('https://catbox.moe/user/api.php', files={'fileToUpload': f}, timeout=60)
+                response = requests.post(
+                    'https://x0.at/',
+                    files={'file': f},
+                    timeout=60
+                )
+            
             if response.status_code == 200:
-                await msg.edit(f"<bold>ссылка на catbox.moe:</bold>\n<code>{response.text.strip()}</code>", parse_mode='html', link_preview=False)
-            else: await msg.edit(f"<bold>ошибка: {response.status_code}</bold>", parse_mode='html')
-        except Exception as e: await msg.edit(f"<bold>ошибка: {e}</bold>", parse_mode='html')
+                # x0.at возвращает прямую ссылку на файл
+                link = response.text.strip()
+                await msg.edit(f"<b>ссылка на x0.at:</b>\n<code>{link}</code>", parse_mode='html', link_preview=False)
+            else:
+                await msg.edit(f"<b>ошибка x0.at: {response.status_code}</b>", parse_mode='html')
+                
+        except requests.exceptions.Timeout:
+            await msg.edit("<b>таймаут подключения. попробуй позже</b>", parse_mode='html')
+        except Exception as e:
+            await msg.edit(f"<b>ошибка: {e}</b>", parse_mode='html')
         finally:
             if file and os.path.exists(file):
-                try: os.remove(file)
-                except: pass
+                try:
+                    os.remove(file)
+                except:
+                    pass
 
     # ========== NAME ==========
     async def name_handler(self, msg):
@@ -741,7 +783,7 @@ POST КОМАНДЫ:
         media_counter = len(media_storage)
         await msg.edit(f"<b>медиа '{found}' удалено</b>", parse_mode='html')
 
-    # ========== POST COMMANDS (рассылка с ПЕРЕСЫЛКОЙ - ИСПРАВЛЕНА) ==========
+    # ========== POST COMMANDS (рассылка с ПЕРЕСЫЛКОЙ) ==========
     async def poste_handler(self, msg):
         global poste_list, poste_blocklist
         args = await self.get_args(msg)
