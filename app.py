@@ -20,10 +20,11 @@ API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
 client = TelegramClient('session', API_ID, API_HASH)
 
 async def main():
+    # Принудительно запрашиваем номер телефона и код в логах
     await client.start()
-    print("✅ Бот запущен!")
+    print("✅ Бот успешно авторизован!")
     me = await client.get_me()
-    print(f"👤 {me.first_name}")
+    print(f"👤 Имя: {me.first_name} (@{me.username})")
     await client.run_until_disconnected()
 
 def run_bot():
