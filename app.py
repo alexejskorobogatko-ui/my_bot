@@ -32,9 +32,17 @@ def run_web():
     port = int(os.environ.get("PORT", 8080))
     web_app.run(host="0.0.0.0", port=port)
 
-# ==================== ДАННЫЕ ====================
-API_ID = 30843796
-API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
+# ==================== ДАННЫЕ ДЛЯ ДВУХ АККАУНТОВ ====================
+
+# Аккаунт 1: Мерцифал
+ACCOUNT1_SESSION = 'session'  # файл session.session
+ACCOUNT1_API_ID = 30843796
+ACCOUNT1_API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
+
+# Аккаунт 2: Второй аккаунт (замени на свои данные!)
+ACCOUNT2_SESSION = 'session2'  # файл session2.session
+ACCOUNT2_API_ID = 30843796      # ЗАМЕНИ НА СВОЙ API_ID
+ACCOUNT2_API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'  # ЗАМЕНИ НА СВОЙ API_HASH
 
 # ==================== ТЕКСТЫ ====================
 menutext = "<b>{}</b>\nвторой хелп - <code>.menu</code>\n\n остальные команды:\n<code>.list</code> + медия — список работы бота.\n<code>.help</code> + медия — mеnю.\n<code>.menu</code> — второе меню.\n<code>.words</code> + репл — количество слов в сообщении.\n<code>.load</code> + репл — смена шаблов бота.\n<code>.file</code> — основной шаблон бота.\n<code>.uptime</code> — аптайм.\n<code>.ping</code> — пинг.\n<code>.id</code> — узнать чат /юз айди\n<code>.x0</code> + репл — загрузить медию на хостинг\n\nthis chat id: <code>{}</code>\nyour user id: <code>{}</code>\nyour name: <code>{}</code>\nyour username: @{}</b>\nbot owner — <a href='.'>@misosphere</a></b>"
@@ -66,9 +74,9 @@ mlist = 'https://x0.at/Dv0D.jpg'
 cmds = 'https://x0.at/Dv0D.jpg'
 
 # ==================== КЛАСС ЮЗЕРБОТА ====================
-class Userbot():
-    def __init__(self):
-        self.client = TelegramClient('session', API_ID, API_HASH)
+class Userbot:
+    def __init__(self, session_name, api_id, api_hash):
+        self.client = TelegramClient(session_name, api_id, api_hash)
         self.droch_active = False
         self.pharma_active = False
         self.target_user = None
@@ -675,18 +683,16 @@ class Userbot():
 
     async def run(self):
         await self.client.start()
-        print("✅ Бот запущен!", flush=True)
+        print(f"✅ Бот запущен! ({self.client.session.filename})", flush=True)
         me = await self.client.get_me()
         print(f"👤 {me.first_name} (@{me.username})", flush=True)
         print("🎯 Команды загружены. Ожидание сообщений...", flush=True)
 
-        # Регистрация обработчиков
         @self.client.on(events.NewMessage)
         async def handler(event):
             msg = event.message
             if not msg.out:
                 await self.watcher(msg)
-                # Авто-удаление цели
                 if self.target_user and not msg.out:
                     sender = await msg.get_sender()
                     if sender and (sender.username == self.target_user or str(sender.id) == self.target_user):
@@ -698,7 +704,6 @@ class Userbot():
 
             text = msg.text or ""
             
-            # Команды
             if text.startswith('.afk'):
                 await self.afk_handler(msg)
             elif text.startswith('.avt'):
@@ -768,10 +773,19 @@ class Userbot():
 
         await self.client.run_until_disconnected()
 
-# ==================== ЗАПУСК ====================
+# ==================== ЗАПУСК ДВУХ АККАУНТОВ ====================
+async def run_bots():
+    bot1 = Userbot(ACCOUNT1_SESSION, ACCOUNT1_API_ID, ACCOUNT1_API_HASH)
+    bot2 = Userbot(ACCOUNT2_SESSION, ACCOUNT2_API_ID, ACCOUNT2_API_HASH)
+    
+    # Запускаем обоих в одном событийном цикле
+    await asyncio.gather(
+        bot1.run(),
+        bot2.run()
+    )
+
 if __name__ == "__main__":
-    # Запускаем веб-сервер для Render
+    # Запускаем веб-сервер для Render в фоне
     threading.Thread(target=run_web, daemon=True).start()
-    # Запускаем бота
-    bot = Userbot()
-    asyncio.run(bot.run())
+    # Запускаем двух ботов
+    asyncio.run(run_bots())
