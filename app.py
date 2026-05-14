@@ -4,7 +4,7 @@ import threading
 from flask import Flask
 from telethon import TelegramClient
 
-PHONE = os.environ.get("PHONE")
+PHONE = os.environ.get("+16816004569")
 API_ID = int(os.environ.get("API_ID", 30843796))
 API_HASH = os.environ.get("API_HASH", '535bed75aaa17ed391bc11e1dac2cb21')
 
