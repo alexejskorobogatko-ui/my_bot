@@ -222,7 +222,13 @@ class Userbot:
             try:
                 if photo: await msg.respond(shapka_text + " " + choice(shablon), file=photo, reply_to=reply.id if reply else None)
                 else: await msg.respond(shapka_text + " " + choice(shablon), reply_to=reply.id if reply else None)
-            except: pass
+            except Exception as e:
+                if "TypeNotFoundError" in str(e) or "Constructor ID" in str(e):
+                    pass
+                elif "FloodWaitError" in str(e):
+                    await asyncio.sleep(e.seconds)
+                else:
+                    print(f"Спам ошибка: {e}")
             await asyncio.sleep(time_val)
         if chat_id in spam_state: del spam_state[chat_id]
 
@@ -243,7 +249,13 @@ class Userbot:
             try:
                 if photo: await self.client.send_file(chat_id, photo, caption=shapka_text + " " + choice(shablon))
                 else: await self.client.send_message(chat_id, shapka_text + " " + choice(shablon))
-            except: pass
+            except Exception as e:
+                if "TypeNotFoundError" in str(e) or "Constructor ID" in str(e):
+                    pass
+                elif "FloodWaitError" in str(e):
+                    await asyncio.sleep(e.seconds)
+                else:
+                    print(f"Спам ошибка: {e}")
             await asyncio.sleep(time_val)
         if chat_id in spam_state1: del spam_state1[chat_id]
 
@@ -330,7 +342,13 @@ class Userbot:
             try:
                 if photo: await self.client.send_file(chat_id, photo, caption=text, parse_mode='html')
                 else: await self.client.send_message(chat_id, text, parse_mode='html')
-            except: pass
+            except Exception as e:
+                if "TypeNotFoundError" in str(e) or "Constructor ID" in str(e):
+                    pass
+                elif "FloodWaitError" in str(e):
+                    await asyncio.sleep(e.seconds)
+                else:
+                    print(f"Теггер ошибка: {e}")
             await asyncio.sleep(time_val)
         if chat_id in tagger_chats: del tagger_chats[chat_id]
 
@@ -352,7 +370,13 @@ class Userbot:
             try:
                 if photo: await self.client.send_file(chat_id, photo, caption=text, parse_mode='html')
                 else: await self.client.send_message(chat_id, text, parse_mode='html')
-            except: pass
+            except Exception as e:
+                if "TypeNotFoundError" in str(e) or "Constructor ID" in str(e):
+                    pass
+                elif "FloodWaitError" in str(e):
+                    await asyncio.sleep(e.seconds)
+                else:
+                    print(f"Теггер ошибка: {e}")
             await asyncio.sleep(time_val)
         if chat_id in tag_chats: del tag_chats[chat_id]
 
