@@ -40,8 +40,12 @@ ACCOUNT2_SESSION = 'session2'
 ACCOUNT2_API_ID = 30843796
 ACCOUNT2_API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
 
-# ==================== ТЕКСТЫ ====================
+# ==================== ТЕКСТЫ (СТАРОЕ МЕНЮ) ====================
+menutext = "<b>{}</b>\nвторой хелп - <code>.menu</code>\n\n остальные команды:\n<code>.list</code> + медия — список работы бота.\n<code>.help</code> + медия — mеnю.\n<code>.menu</code> — второе меню.\n<code>.words</code> + репл — количество слов в сообщении.\n<code>.load</code> + репл — смена шаблов бота.\n<code>.file</code> — основной шаблон бота.\n<code>.uptime</code> — аптайм.\n<code>.ping</code> — пинг.\n<code>.id</code> — узнать чат /юз айди\n<code>.x0</code> + репл — загрузить медию на хостинг\n\nthis chat id: <code>{}</code>\nyour user id: <code>{}</code>\nyour name: <code>{}</code>\nyour username: @{}</b>\nbot owner — <a href='.'>@misosphere</a></b>"
+
 shablon = ["я тебе все ебало переломаю", "ты сын шлюхи ебаный", "ты давай отсоси мою залупу"]
+
+menu = "первый хелп -  <code>.help</code>\n\n команды спам:\n<code>.tagger</code> + айди + время + скорость + реплай — спам-теггер.\n<code>.tag</code> + чат_айди + юз_айди + время + скорость — спам-теггер.\n<code>.off</code> / .tagoff + айди — остановка теггера.\n<code>.clr</code> + время + скорость + реплай — календарь.\n<code>.cal</code> + чат_айди + время + скорость — календарь.\n<code>.uchange</code> + [shapka,скорость,вреmя] + юз_айди — смена аргументов автоответчика.\n<code>.avt</code> + время + реплай\n<code>.target</code> + юз.\n<code>.farm</code> | хелп фарма.\nовнер бота - <tg://user?id=472362019'>@misosphere</a>"
 
 # ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
 afk_photo = ""
@@ -57,12 +61,14 @@ autoreply_photo = {}
 autoreply_shpk = {}
 start_timer = 10
 tagger_chats = {}
+tag_chats = {}
 reason = "бот"
-mid = None
+mid = 'https://x0.at/cUQa.jpg'
 name = "ебательный аппарат"
-mh = None
-mm = None
-cmds = None
+mh = 'https://x0.at/4JEh.jpeg'
+mm = 'https://x0.at/4JEh.jpeg'
+mlist = 'https://x0.at/Dv0D.jpg'
+cmds = 'https://x0.at/Dv0D.jpg'
 
 # ========== МЕДИА КОМАНДЫ ==========
 media_storage = {}
@@ -72,7 +78,10 @@ media_counter = 0
 poste_list = {}
 poste_blocklist = []
 
-# ========== МЕДИА ДЛЯ .status ==========
+# ========== DETECT ==========
+detect_list = {}  # {chat_id: {user_id: {'name': name, 'task': asyncio.Task}}}
+
+# ========== МЕДИА ДЛЯ НОВЫХ КОМАНД ==========
 status_media = None
 post_media = None
 media_cmd_media = None
@@ -100,6 +109,20 @@ class Userbot:
         else:
             await msg.edit(caption, parse_mode='html')
 
+    async def get_entity_name(self, entity):
+        try:
+            if hasattr(entity, 'first_name'):
+                name = entity.first_name or "None"
+                if hasattr(entity, 'last_name') and entity.last_name:
+                    name += f" {entity.last_name}"
+                return name
+            elif hasattr(entity, 'title'):
+                return entity.title
+            else:
+                return str(entity.id)
+        except:
+            return str(entity.id)
+
     # ========== WATCHER ==========
     async def watcher(self, msg):
         global state, user_list, start_timer, reason, afk_photo
@@ -123,6 +146,40 @@ class Userbot:
                 await asyncio.sleep(autoreply_time[user_id])
                 text = autoreply_shpk.get(user_id, '') + " " + choice(shablon) if autoreply_shpk.get(user_id) else choice(shablon)
                 await msg.reply(text, file=autoreply_photo.get(user_id), parse_mode='html')
+        
+        # DETECT: если сообщение от отслеживаемого пользователя — сбрасываем таймер
+        chat_id = msg.chat_id
+        if chat_id in detect_list:
+            user_id = msg.sender_id
+            if user_id in detect_list[chat_id]:
+                # отменяем старый таймер
+                old_task = detect_list[chat_id][user_id].get('task')
+                if old_task and not old_task.done():
+                    old_task.cancel()
+                # запускаем новый
+                user_name = detect_list[chat_id][user_id]['name']
+                chat_name = await self.get_entity_name(await self.client.get_entity(chat_id))
+                
+                async def wait_and_notify():
+                    await asyncio.sleep(3600)
+                    try:
+                        saved_messages = await self.client.get_entity('me')
+                        await self.client.send_message(
+                            saved_messages,
+                            f"⛧ <b>Detect</b>\n"
+                            f"<b>Пользователь:</b> {user_name}\n"
+                            f"<b>Чат:</b> {chat_name}\n"
+                            f"<b>Статус:</b> не писал 1 час"
+                        )
+                    except Exception as e:
+                        print(f"Ошибка отправки уведомления: {e}")
+                    if chat_id in detect_list and user_id in detect_list[chat_id]:
+                        del detect_list[chat_id][user_id]
+                        if not detect_list[chat_id]:
+                            del detect_list[chat_id]
+                
+                task = asyncio.create_task(wait_and_notify())
+                detect_list[chat_id][user_id]['task'] = task
 
     # ========== AFK ==========
     async def afk_handler(self, msg):
@@ -151,7 +208,7 @@ class Userbot:
         reason = ' '.join(args)
         await msg.edit(f'причина изменена: <code>{reason}</code>', parse_mode='html')
 
-    # ========== СПАМ В ЧАТЕ (reply) ==========
+    # ========== СПАМ ==========
     async def renewal_handler(self, msg):
         global spam_state
         args = await self.get_args(msg)
@@ -163,7 +220,7 @@ class Userbot:
         photo = args.split()[1] if len(args.split()) > 1 and 'https' in args.split()[1] else None
         shapka_text = ' '.join(args.split()[2:]) if len(args.split()) > 2 else ''
         spam_state[chat_id] = True
-        await msg.edit(f'<b>включен\nвыкл: .stop {chat_id}</b>', parse_mode='html')
+        await msg.edit(f'<b>включен\nвыкл: <code>.stop {chat_id}</code></b>', parse_mode='html')
         while chat_id in spam_state and spam_state[chat_id]:
             try:
                 if photo: await msg.respond(shapka_text + " " + choice(shablon), file=photo, reply_to=reply.id if reply else None)
@@ -172,7 +229,6 @@ class Userbot:
             await asyncio.sleep(time_val)
         if chat_id in spam_state: del spam_state[chat_id]
 
-    # ========== СПАМ В ДРУГОЙ ЧАТ ==========
     async def spam_handler(self, msg):
         global spam_state1
         args = msg.text.split(maxsplit=1)
@@ -185,7 +241,7 @@ class Userbot:
         photo = parts[2] if len(parts) > 2 and 'https' in parts[2] else None
         shapka_text = ' '.join(parts[3:]) if len(parts) > 3 else ''
         spam_state1[chat_id] = True
-        await msg.edit(f'<b>включен в чате {chat_id}\nвыкл: .rstop {chat_id}</b>', parse_mode='html')
+        await msg.edit(f'<b>включен в чате {chat_id}\nвыкл: <code>.rstop {chat_id}</code></b>', parse_mode='html')
         while chat_id in spam_state1 and spam_state1[chat_id]:
             try:
                 if photo: await self.client.send_file(chat_id, photo, caption=shapka_text + " " + choice(shablon))
@@ -207,14 +263,14 @@ class Userbot:
                 autoreply_shpk[user_id] = ' '.join(args[1:])
                 autoreply_time[user_id] = 1
                 autoreply_photo[user_id] = None
-                await msg.edit(f'<b>включен на {user_id}\nвыкл: .nrcc</b>', parse_mode='html')
+                await msg.edit(f'<b>включен на <code>{user_id}</code>\nвыкл: <code>.nrcc</code></b>', parse_mode='html')
             else:
                 user_id = int(args[1])
                 autoreply_list.append(user_id)
                 autoreply_time[user_id] = int(args[2])
                 autoreply_photo[user_id] = args[3] if len(args) > 3 and 'https' in args[3] else None
                 autoreply_shpk[user_id] = ' '.join(args[4:]) if len(args) > 4 else ''
-                await msg.edit(f'<b>включен\nвыкл: .nrcc {user_id}</b>', parse_mode='html')
+                await msg.edit(f'<b>включен\nвыкл: <code>.nrcc {user_id}</code></b>', parse_mode='html')
         elif cmd == '.nrcc':
             if msg.is_reply: user_id = (await msg.get_reply_message()).sender_id
             else: user_id = int(args[1]) if len(args) > 1 else 0
@@ -223,7 +279,7 @@ class Userbot:
                 autoreply_time.pop(user_id, None)
                 autoreply_photo.pop(user_id, None)
                 autoreply_shpk.pop(user_id, None)
-                await msg.edit(f'<b>выключен на {user_id}</b>', parse_mode='html')
+                await msg.edit(f'<b>выключен на <code>{user_id}</code></b>', parse_mode='html')
 
     # ========== КАЛЕНДАРЬ ==========
     async def kalendar_handler(self, msg):
@@ -257,7 +313,7 @@ class Userbot:
             autoreply_time[user_id] = int(value)
             await msg.edit(f'<b>задержка для {user_id}: {autoreply_time[user_id]} сек</b>', parse_mode='html')
 
-    # ========== ТЕГГЕР ==========
+    # ========== ТЕГГЕРЫ ==========
     async def tagger_handler(self, msg):
         args = msg.text.split(maxsplit=1)
         if len(args) < 2: return await msg.edit("<b>аргументы: user_id время [медиа] [текст]</b>", parse_mode='html')
@@ -271,7 +327,7 @@ class Userbot:
         reply_to_msg = await msg.get_reply_message()
         chat_id = reply_to_msg.chat_id if reply_to_msg else msg.chat_id
         tagger_chats[chat_id] = True
-        await msg.edit(f'<b>включен\nвыкл: .off {chat_id}</b>', parse_mode='html')
+        await msg.edit(f'<b>включен\nвыкл: <code>.off {chat_id}</code></b>', parse_mode='html')
         while chat_id in tagger_chats:
             text = f"{caption} <a href='tg://user?id={user_id}'>{choice(shablon)}</a>"
             try:
@@ -280,6 +336,28 @@ class Userbot:
             except: pass
             await asyncio.sleep(time_val)
         if chat_id in tagger_chats: del tagger_chats[chat_id]
+
+    async def tag_handler(self, msg):
+        args = msg.text.split(maxsplit=1)
+        if len(args) < 2: return
+        parts = args[1].split()
+        if len(parts) < 3: return
+        chat_id = int(parts[0])
+        user_id = int(parts[1])
+        time_val = int(parts[2])
+        if time_val < 3: return await msg.edit("<b>мин. задержка - 3</b>", parse_mode='html')
+        photo = parts[3] if len(parts) > 3 and 'https' in parts[3] else None
+        caption = ' '.join(parts[4:]) if len(parts) > 4 else ''
+        tag_chats[chat_id] = True
+        await msg.edit(f'<b>включен\nвыкл: <code>.tagoff {chat_id}</code></b>', parse_mode='html')
+        while chat_id in tag_chats:
+            text = f"{caption} <a href='tg://user?id={user_id}'>{choice(shablon)}</a>"
+            try:
+                if photo: await self.client.send_file(chat_id, photo, caption=text, parse_mode='html')
+                else: await self.client.send_message(chat_id, text, parse_mode='html')
+            except: pass
+            await asyncio.sleep(time_val)
+        if chat_id in tag_chats: del tag_chats[chat_id]
 
     # ========== ID ==========
     async def id_handler(self, msg):
@@ -298,9 +376,9 @@ class Userbot:
                         name += f" {sender.last_name}"
                     user_id = sender.id
                     username = f"@{sender.username}" if sender.username else "нет username"
-                    result = f"⛧ Name: {name}\n⛧ ID: <code>{user_id}</code>\n⛧ Username: {username}"
+                    result = f"⛧ <b>Name:</b> {name}\n⛧ <b>ID:</b> <code>{user_id}</code>\n⛧ <b>Username:</b> {username}"
                 else:
-                    result = f"⛧ Name: Unknown\n⛧ ID: <code>unknown</code>\n⛧ Username: unknown"
+                    result = f"⛧ <b>Name:</b> Unknown\n⛧ <b>ID:</b> <code>unknown</code>\n⛧ <b>Username:</b> unknown"
                 
                 if mid:
                     await self.client.send_file(msg.chat_id, mid, caption=result, parse_mode='html')
@@ -316,7 +394,7 @@ class Userbot:
                     name += f" {entity.last_name}"
                 user_id = entity.id
                 username = f"@{entity.username}" if hasattr(entity, 'username') and entity.username else "нет username"
-                result = f"⛧ Name: {name}\n⛧ ID: <code>{user_id}</code>\n⛧ Username: {username}"
+                result = f"⛧ <b>Name:</b> {name}\n⛧ <b>ID:</b> <code>{user_id}</code>\n⛧ <b>Username:</b> {username}"
                 
                 if mid:
                     await self.client.send_file(msg.chat_id, mid, caption=result, parse_mode='html')
@@ -329,7 +407,7 @@ class Userbot:
             chat_title = chat.title if hasattr(chat, 'title') and chat.title else "Личный чат"
             chat_id = chat.id
             chat_username = f"@{chat.username}" if hasattr(chat, 'username') and chat.username else "нет username"
-            result = f"⛧ Name: {chat_title}\n⛧ ID: <code>{chat_id}</code>\n⛧ Username: {chat_username}"
+            result = f"⛧ <b>Name:</b> {chat_title}\n⛧ <b>ID:</b> <code>{chat_id}</code>\n⛧ <b>Username:</b> {chat_username}"
             
             if mid:
                 await self.client.send_file(msg.chat_id, mid, caption=result, parse_mode='html')
@@ -371,14 +449,29 @@ class Userbot:
         os.remove('texts.txt')
         await msg.delete()
 
-    # ========== UPTIME + PING ==========
+    # ========== UPTIME ==========
     async def uptime_handler(self, msg):
         bot_runtime = int(time.time() - start_time)
-        ping_start = time.perf_counter_ns()
-        await msg.edit("<b>измерение...</b>", parse_mode='html')
-        ping_ms = round((time.perf_counter_ns() - ping_start) / 10**6, 2)
-        uptime_str = str(timedelta(seconds=bot_runtime))
-        await msg.edit(f"<b>аптайм:</b> <code>{uptime_str}</code>\n<b>пинг:</b> <code>{ping_ms} ms</code>", parse_mode='html')
+        await msg.edit(f'аптайм бота: <code>{str(timedelta(seconds=bot_runtime))}</code>', parse_mode='html')
+
+    # ========== PING ==========
+    async def ping_handler(self, msg):
+        ping_now = time.perf_counter_ns()
+        await msg.edit(f'<b>пинг: <code>{round((time.perf_counter_ns() - ping_now) / 10**2, 2)} ms</code></b>', parse_mode='html')
+
+    # ========== ВСТУПИТЬ/ВЫЙТИ ИЗ ЧАТА ==========
+    async def join_handler(self, msg):
+        args = await self.get_args(msg)
+        if args:
+            chat_entity = await self.client.get_entity(args.split()[0])
+            await self.client(JoinChannelRequest(chat_entity))
+
+    async def leave_handler(self, msg):
+        args = await self.get_args(msg)
+        if args:
+            chat_entity = await self.client.get_entity(args.split()[0])
+            await self.client(LeaveChannelRequest(chat_entity))
+        else: await self.client(LeaveChannelRequest(msg.chat_id))
 
     # ========== ОСТАНОВКА СПАМА ==========
     async def stop_handler(self, msg):
@@ -402,12 +495,171 @@ class Userbot:
         if chat_id in spam_state1: del spam_state1[chat_id]
         await msg.edit(f"<b>остановлено в чате <code>{chat_id}</code></b>", parse_mode='html')
 
+    async def tagoff_handler(self, msg):
+        global tag_chats
+        args = await self.get_args(msg)
+        chat_id = int(args.split()[0]) if args else msg.chat_id
+        if chat_id in tag_chats: del tag_chats[chat_id]
+        await msg.edit(f"<b>остановлено в чате <code>{chat_id}</code></b>", parse_mode='html')
+
+    async def clear_flood_handler(self, msg):
+        global spam_state, spam_state1, tag_chats, tagger_chats
+        spam_state.clear(); spam_state1.clear(); tag_chats.clear(); tagger_chats.clear()
+        await msg.edit("все флудилки оффнуты")
+
+    async def list_handler(self, msg):
+        global mlist
+        if len(msg.text.split()) > 1:
+            mlist = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
+            return await msg.edit("<b>медиа для .list установлено</b>", parse_mode='html')
+        response = f"spam_state: {spam_state}\n\nspam_state1: {spam_state1}\n\nautoreply_list: {autoreply_list}\n\ntagger_chats: {tagger_chats}\n\ntag_chats: {tag_chats}"
+        if mlist:
+            await self.client.send_file(msg.chat_id, mlist, caption=response, parse_mode='html')
+            await msg.delete()
+        else: await msg.edit(response, parse_mode='html')
+
     async def target_handler(self, msg):
         args = await self.get_args(msg)
         if args:
             self.target_user = args.strip().replace('@', '')
-            await msg.edit(f"<b>цель: <code>{self.target_user}</code></b>", parse_mode='html')
+            await msg.edit(f"цель: <code>{self.target_user}</code>", parse_mode='html')
         else: await msg.edit("<b>укажи юзернейм или ID</b>", parse_mode='html')
+
+    # ========== HELP ==========
+    async def help_handler(self, msg):
+        global mh, name
+        me = await self.client.get_me()
+        if len(msg.text.split()) > 1:
+            mh = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
+            return await msg.edit("<b>медиа для .help установлено</b>", parse_mode='html')
+        caption = menutext.format(name, msg.chat_id, me.id, me.first_name, me.username)
+        if mh:
+            try:
+                await self.client.send_file(msg.chat_id, mh, caption=caption, parse_mode='html')
+                await msg.delete()
+            except: await msg.edit(caption, parse_mode='html')
+        else: await msg.edit(caption, parse_mode='html')
+
+    # ========== MENU ==========
+    async def menu_handler(self, msg):
+        global mm
+        if len(msg.text.split()) > 1:
+            mm = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
+            return await msg.edit("<b>медиа для .menu установлено</b>", parse_mode='html')
+        if mm:
+            try:
+                await self.client.send_file(msg.chat_id, mm, caption=menu, parse_mode='html')
+                await msg.delete()
+            except: await msg.edit(menu, parse_mode='html')
+        else: await msg.edit(menu, parse_mode='html')
+
+    # ========== CMD ==========
+    async def cmd_handler(self, msg):
+        global cmds
+        if len(msg.text.split()) > 1:
+            cmds = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
+            return await msg.edit("<b>медиа для .cmd установлено</b>", parse_mode='html')
+        
+        commands_text = """
+<bold>ПОЛНЫЙ СПИСОК КОМАНД:</bold>
+
+<bold>ОСНОВНЫЕ КОМАНДЫ:</bold>
+<code>.help</code> — главное меню
+<code>.menu</code> — второе меню
+<code>.cmd</code> — этот список команд
+<code>.id</code> — узнать chat id / user id
+<code>.ping</code> — проверить пинг бота
+<code>.uptime</code> — аптайм бота
+<code>.name</code> + текст — изменить имя бота
+
+<bold>AFK РЕЖИМ:</bold>
+<code>.afk 1</code> — включить AFK
+<code>.afk 2</code> — выключить AFK
+<code>.afk [причина]</code> — установить причину
+<code>.afk [ссылка]</code> — установить медиа для AFK
+
+<bold>АВТООТВЕТЧИК (на пользователя):</bold>
+<code>.nrc [время] [медиа] [шапка]</code> + реплай — включить автоответ
+<code>.nrcc [id]</code> — выключить автоответ
+<code>.rchange shapka [id] [текст]</code> — сменить шапку
+<code>.rchange time [id] [секунды]</code> — сменить задержку
+<code>.rchange media [id] [ссылка]</code> — сменить медиа
+
+<bold>СПАМ В ЧАТЕ (reply):</bold>
+<code>.avt [время] [медиа] [шапка]</code> + реплай — спам в чат
+<code>.stop [chat_id]</code> — остановить спам
+
+<bold>СПАМ В ДРУГОЙ ЧАТ:</bold>
+<code>.nzt [chat_id] [время] [медиа] [шапка]</code> — спам в другой чат
+<code>.rstop [chat_id]</code> — остановить
+
+<bold>КАЛЕНДАРЬ (отложенный спам):</bold>
+<code>.clr [время] [медиа] [шапка]</code> + реплай — календарь
+<code>.cal [chat_id] [время] [медиа] [шапка]</code> — календарь в другой чат
+
+<bold>ТЕГГЕРЫ:</bold>
+<code>.tagger [user_id] [время] [медиа] [текст]</code> + реплай — теггер
+<code>.tag [chat_id] [user_id] [время] [медиа] [текст]</code> — теггер в другой чат
+<code>.off [chat_id]</code> — остановить tagger
+<code>.tagoff [chat_id]</code> — остановить tag
+
+<bold>РАБОТА С ШАБЛОНАМИ:</bold>
+<code>.load</code> + реплай на файл — загрузить свой шаблон
+<code>.file</code> — выгрузить текущий шаблон
+
+<bold>РАБОТА С ЧАТАМИ:</bold>
+<code>.rrr [ссылка]</code> — вступить в чат
+<code>.leave [ссылка]</code> — выйти из чата
+
+<bold>ХОСТИНГИ:</bold>
+<code>.x0</code> + реплай на медиа — загрузить на x0.at
+
+<bold>ДЕТЕКТ:</bold>
+<code>.detect [@username/id]</code> или реплай — начать слежение
+<code>.detectoff [@username/id]</code> или реплай — остановить слежение
+<code>.detectlist</code> — список активных детектов
+
+<bold>ДРУГИЕ КОМАНДЫ:</bold>
+<code>.words</code> + реплай — подсчёт слов/символов
+<code>.list</code> — список активных процессов
+<code>.c_flood</code> — отключить все флудилки
+<code>.target [username/id]</code> — установить цель для авто-удаления
+
+<bold>МЕДИА ДЛЯ КОМАНД:</bold>
+<code>.help [ссылка]</code> — установить медиа для .help
+<code>.menu [ссылка]</code> — установить медиа для .menu
+<code>.cmd [ссылка]</code> — установить медиа для .cmd
+<code>.list [ссылка]</code> — установить медиа для .list
+<code>.id [ссылка]</code> — установить медиа для .id
+
+<bold>МЕДИА КОМАНДЫ:</bold>
+<code>.pfl [имя]</code> — ответом на фото, видео или m4a скачать и сделать активным
+<code>.phocount</code> — сколько всего медиа скачано
+<code>.pholist</code> — список медиа и активное
+<code>.phoset номер|имя 1|2</code> — поменять активное медиа (1=основное, 2=hntd)
+<code>.resetm 1|2</code> — сбросить выбранное медиа на фото профиля
+<code>.phoren старый новый</code> — переименовать номер медиа
+<code>.phodel номер|имя</code> — удалить медиа
+
+<bold>POST КОМАНДЫ:</bold>
+<code>.poste 'ссылка' минуты</code> — пересылка поста в чаты (кроме каналов и ЛС)
+<code>.poste_stop</code> — остановить все рассылки
+<code>.poste_stop ссылка</code> — остановить по ссылке
+<code>.poste_list</code> — список активных рассылок
+<code>.pblk list</code> — список групп из блок-листа
+<code>.pblk add id</code> / del id / clear — блок-лист пересылки
+<code>.pblkclear</code> — полностью очистить весь pblk list
+
+<bold>СИСТЕМНЫЕ КОМАНДЫ:</bold>
+<code>.status</code> — статус работы функций
+<code>.zw</code> — остановить все функции
+"""
+        if cmds:
+            try:
+                await self.client.send_file(msg.chat_id, cmds, caption=commands_text, parse_mode='html')
+                await msg.delete()
+            except: await msg.edit(commands_text, parse_mode='html')
+        else: await msg.edit(commands_text, parse_mode='html')
 
     # ========== X0 ==========
     async def x0_handler(self, msg):
@@ -738,73 +990,19 @@ class Userbot:
         me = await self.client.get_me()
         target_info = self.target_user if self.target_user else "не установлена"
         
-        # Собираем информацию о спаме (avt)
-        avt_info = []
-        for cid in spam_state.keys():
-            try:
-                entity = await self.client.get_entity(cid)
-                name = entity.title if hasattr(entity, 'title') and entity.title else str(cid)
-                username = f" (@{entity.username})" if hasattr(entity, 'username') and entity.username else ""
-                avt_info.append(f"  {cid} - {name}{username}")
-            except:
-                avt_info.append(f"  {cid}")
-        avt_text = "\n".join(avt_info) if avt_info else "  нет активных"
-        
-        # Собираем информацию о спаме (nzt)
-        nzt_info = []
-        for cid in spam_state1.keys():
-            try:
-                entity = await self.client.get_entity(cid)
-                name = entity.title if hasattr(entity, 'title') and entity.title else str(cid)
-                username = f" (@{entity.username})" if hasattr(entity, 'username') and entity.username else ""
-                nzt_info.append(f"  {cid} - {name}{username}")
-            except:
-                nzt_info.append(f"  {cid}")
-        nzt_text = "\n".join(nzt_info) if nzt_info else "  нет активных"
-        
-        # Собираем информацию о теггере
-        tagger_info = []
-        for cid in tagger_chats.keys():
-            try:
-                entity = await self.client.get_entity(cid)
-                name = entity.title if hasattr(entity, 'title') and entity.title else str(cid)
-                username = f" (@{entity.username})" if hasattr(entity, 'username') and entity.username else ""
-                tagger_info.append(f"  {cid} - {name}{username}")
-            except:
-                tagger_info.append(f"  {cid}")
-        tagger_text = "\n".join(tagger_info) if tagger_info else "  нет активных"
-        
-        # Собираем информацию об автоответчике
-        autoreply_info = []
-        for uid in autoreply_list:
-            try:
-                entity = await self.client.get_entity(uid)
-                name = entity.first_name if hasattr(entity, 'first_name') and entity.first_name else str(uid)
-                username = f" (@{entity.username})" if hasattr(entity, 'username') and entity.username else ""
-                autoreply_info.append(f"  {uid} - {name}{username}")
-            except:
-                autoreply_info.append(f"  {uid}")
-        autoreply_text = "\n".join(autoreply_info) if autoreply_info else "  нет активных"
-        
         status_text = f"""
 <bold>статус работы функций:</bold>
 
 спам (avt): {len(spam_state)} активных
-{avt_text}
-
 спам (nzt): {len(spam_state1)} активных
-{nzt_text}
-
-теггер: {len(tagger_chats)} активных
-{tagger_text}
-
+теггер (tagger): {len(tagger_chats)} активных
+теггер (tag): {len(tag_chats)} активных
 автоответчик: {len(autoreply_list)} пользователей
-{autoreply_text}
-
 рассылки (poste): {len(poste_list)} активных
 блок-лист (pblk): {len(poste_blocklist)} чатов
 AFK: {'включен' if state else 'выключен'}
 цель (target): {target_info}
+детекты: {sum(len(v) for v in detect_list.values())} активных
 
 --- аккаунт ---
 имя: {me.first_name}
@@ -813,18 +1011,158 @@ AFK: {'включен' if state else 'выключен'}
 """
         await self.reply_with_media(msg, status_media, status_text)
 
+    # ========== DETECT ==========
+    async def detect_handler(self, msg):
+        """Установить детект на пользователя"""
+        global detect_list
+        
+        target_user = None
+        target_name = None
+        
+        if msg.is_reply:
+            reply_msg = await msg.get_reply_message()
+            target_user = await reply_msg.get_sender()
+        else:
+            args = await self.get_args(msg)
+            if args:
+                try:
+                    target_user = await self.client.get_entity(args.strip())
+                except:
+                    return await msg.edit("<b>не удалось найти пользователя</b>", parse_mode='html')
+            else:
+                return await msg.edit("<b>использование: .detect [@username/id] или реплай на сообщение</b>", parse_mode='html')
+        
+        if not target_user:
+            return await msg.edit("<b>не удалось определить пользователя</b>", parse_mode='html')
+        
+        user_id = target_user.id
+        user_name = await self.get_entity_name(target_user)
+        chat_id = msg.chat_id
+        chat_name = await self.get_entity_name(await msg.get_chat())
+        
+        # Если уже есть детект на этого пользователя в этом чате — отменяем старый
+        if chat_id in detect_list and user_id in detect_list[chat_id]:
+            old_task = detect_list[chat_id][user_id].get('task')
+            if old_task and not old_task.done():
+                old_task.cancel()
+        
+        # Создаём задачу на ожидание
+        async def wait_and_notify():
+            await asyncio.sleep(3600)  # 1 час
+            try:
+                saved_messages = await self.client.get_entity('me')
+                await self.client.send_message(
+                    saved_messages,
+                    f"⛧ <b>Detect</b>\n"
+                    f"<b>Пользователь:</b> {user_name}\n"
+                    f"<b>Чат:</b> {chat_name}\n"
+                    f"<b>Статус:</b> не писал 1 час"
+                )
+            except Exception as e:
+                print(f"Ошибка отправки уведомления: {e}")
+            
+            # Удаляем детект после уведомления
+            if chat_id in detect_list and user_id in detect_list[chat_id]:
+                del detect_list[chat_id][user_id]
+                if not detect_list[chat_id]:
+                    del detect_list[chat_id]
+        
+        task = asyncio.create_task(wait_and_notify())
+        
+        # Сохраняем детект
+        if chat_id not in detect_list:
+            detect_list[chat_id] = {}
+        detect_list[chat_id][user_id] = {
+            'name': user_name,
+            'task': task
+        }
+        
+        await msg.edit(
+            f"⛧ <b>Detect установлен</b>\n"
+            f"<b>Пользователь:</b> {user_name}\n"
+            f"<b>Чат:</b> {chat_name}\n"
+            f"<b>Условие:</b> если не напишет 1 час — уведомлю в избранное",
+            parse_mode='html'
+        )
+
+    async def detectoff_handler(self, msg):
+        """Отключить детект на пользователя"""
+        global detect_list
+        
+        target_user = None
+        
+        if msg.is_reply:
+            reply_msg = await msg.get_reply_message()
+            target_user = await reply_msg.get_sender()
+        else:
+            args = await self.get_args(msg)
+            if args:
+                try:
+                    target_user = await self.client.get_entity(args.strip())
+                except:
+                    return await msg.edit("<b>не удалось найти пользователя</b>", parse_mode='html')
+            else:
+                return await msg.edit("<b>использование: .detectoff [@username/id] или реплай на сообщение</b>", parse_mode='html')
+        
+        if not target_user:
+            return await msg.edit("<b>не удалось определить пользователя</b>", parse_mode='html')
+        
+        user_id = target_user.id
+        chat_id = msg.chat_id
+        
+        if chat_id in detect_list and user_id in detect_list[chat_id]:
+            task = detect_list[chat_id][user_id].get('task')
+            if task and not task.done():
+                task.cancel()
+            del detect_list[chat_id][user_id]
+            if not detect_list[chat_id]:
+                del detect_list[chat_id]
+            await msg.edit(f"<b>⛧ Детект на пользователя {target_user.first_name or target_user.id} отключен</b>", parse_mode='html')
+        else:
+            await msg.edit("<b>детект на этого пользователя не найден</b>", parse_mode='html')
+
+    async def detectlist_handler(self, msg):
+        """Показать список активных детектов"""
+        global detect_list
+        
+        if not detect_list:
+            return await msg.edit("<b>нет активных детектов</b>", parse_mode='html')
+        
+        lines = []
+        for chat_id, users in detect_list.items():
+            try:
+                chat_entity = await self.client.get_entity(chat_id)
+                chat_name = await self.get_entity_name(chat_entity)
+            except:
+                chat_name = str(chat_id)
+            lines.append(f"<b>Чат:</b> {chat_name}")
+            for user_id, data in users.items():
+                lines.append(f"  • {data['name']} ({user_id})")
+            lines.append("")
+        
+        await msg.edit("\n".join(lines), parse_mode='html')
+
     # ========== ОСТАНОВИТЬ ВСЕ ФУНКЦИИ ==========
     async def zw_handler(self, msg):
-        global spam_state, spam_state1, tagger_chats, autoreply_list, poste_list, state, user_list, start_timer, reason, afk_photo
+        global spam_state, spam_state1, tagger_chats, tag_chats, autoreply_list, poste_list, state, user_list, start_timer, reason, afk_photo, detect_list
         
         spam_state.clear()
         spam_state1.clear()
         tagger_chats.clear()
+        tag_chats.clear()
         autoreply_list.clear()
         
         for link in list(poste_list.keys()):
             poste_list[link]['running'] = False
         poste_list.clear()
+        
+        # Отменяем все детекты
+        for chat_id, users in detect_list.items():
+            for user_id, data in users.items():
+                task = data.get('task')
+                if task and not task.done():
+                    task.cancel()
+        detect_list.clear()
         
         state = False
         user_list = []
@@ -834,286 +1172,6 @@ AFK: {'включен' if state else 'выключен'}
         self.target_user = None
         
         await msg.edit("<bold>все функции остановлены</bold>", parse_mode='html')
-
-    # ========== HELP ==========
-    async def help_handler(self, msg):
-        global mh, name
-        me = await self.client.get_me()
-        if len(msg.text.split()) > 1:
-            mh = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
-            return await msg.edit("<b>медиа для .help установлено</b>", parse_mode='html')
-        
-        help_text = f"""
-<bold>основные команды:</bold>
-
-<code>.help</code> — это меню
-<code>.menu</code> — второе меню
-<code>.cmd</code> — полный список команд
-<code>.id</code> — узнать chat id / user id
-<code>.uptime</code> — аптайм и пинг
-<code>.name [текст]</code> — изменить имя бота
-
-<bold>AFK режим:</bold>
-
-<code>.afk 1</code> — включить AFK
-<code>.afk 2</code> — выключить AFK
-<code>.afk [причина]</code> — установить причину
-<code>.afk [ссылка]</code> — установить медиа для AFK
-
-<bold>автоответчик:</bold>
-
-<code>.nrc [время] [медиа] [шапка]</code> + реплай — включить автоответ
-<code>.nrcc [id]</code> — выключить автоответ
-<code>.rchange shapka [id] [текст]</code> — сменить шапку
-<code>.rchange time [id] [секунды]</code> — сменить задержку
-<code>.rchange media [id] [ссылка]</code> — сменить медиа
-
-<bold>спам в чате (reply):</bold>
-
-<code>.avt [время] [медиа] [шапка]</code> + реплай — спам в чат
-<code>.stop [chat_id]</code> — остановить спам
-
-<bold>спам в другой чат:</bold>
-
-<code>.nzt [chat_id] [время] [медиа] [шапка]</code> — спам в другой чат
-<code>.rstop [chat_id]</code> — остановить
-
-<bold>календарь (отложенный спам):</bold>
-
-<code>.clr [время] [медиа] [шапка]</code> + реплай — календарь
-<code>.cal [chat_id] [время] [медиа] [шапка]</code> — календарь в другой чат
-
-<bold>теггер:</bold>
-
-<code>.tagger [user_id] [время] [медиа] [текст]</code> + реплай — теггер
-<code>.off [chat_id]</code> — остановить теггер
-
-<bold>работа с шаблонами:</bold>
-
-<code>.load</code> + реплай на файл — загрузить свой шаблон
-<code>.file</code> — выгрузить текущий шаблон
-
-<bold>хостинги:</bold>
-
-<code>.x0</code> + реплай на медиа — загрузить на x0.at
-
-<bold>другие команды:</bold>
-
-<code>.words</code> + реплай — подсчёт слов/символов
-<code>.target [username/id]</code> — установить цель для авто-удаления
-
-<bold>медиа для команд:</bold>
-
-<code>.help [ссылка]</code> — установить медиа для .help
-<code>.menu [ссылка]</code> — установить медиа для .menu
-<code>.cmd [ссылка]</code> — установить медиа для .cmd
-<code>.id [ссылка]</code> — установить медиа для .id
-
-<bold>системные команды:</bold>
-
-<code>.status</code> — статус работы функций
-<code>.zw</code> — остановить все функции
-
-<bold>медиа команды:</bold>
-<code>.media</code> — показать все медиа команды
-
-<bold>post команды:</bold>
-<code>.post</code> — показать все post команды
-
-бот owner — @misosphere
-"""
-        if mh:
-            try:
-                await self.client.send_file(msg.chat_id, mh, caption=help_text, parse_mode='html')
-                await msg.delete()
-            except:
-                await msg.edit(help_text, parse_mode='html')
-        else:
-            await msg.edit(help_text, parse_mode='html')
-
-    # ========== MENU ==========
-    async def menu_handler(self, msg):
-        global mm, name
-        me = await self.client.get_me()
-        if len(msg.text.split()) > 1:
-            mm = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
-            return await msg.edit("<b>медиа для .menu установлено</b>", parse_mode='html')
-        
-        menu_text = f"""
-<bold>меню флуда и управления:</bold>
-
-<code>.help</code> — основное меню
-<code>.menu</code> — это меню
-<code>.cmd</code> — полный список команд
-
-<bold>спам команды:</bold>
-<code>.avt [время] [медиа] [шапка]</code> + реплай
-<code>.nzt [chat_id] [время] [медиа] [шапка]</code>
-<code>.stop [chat_id]</code>
-<code>.rstop [chat_id]</code>
-
-<bold>теггер:</bold>
-<code>.tagger [user_id] [время] [медиа] [текст]</code> + реплай
-<code>.off [chat_id]</code>
-
-<bold>автоответчик:</bold>
-<code>.nrc [время] [медиа] [шапка]</code> + реплай
-<code>.nrcc [id]</code>
-<code>.rchange shapka|time|media [id] [значение]</code>
-
-<bold>календарь:</bold>
-<code>.clr [время] [медиа] [шапка]</code> + реплай
-<code>.cal [chat_id] [время] [медиа] [шапка]</code>
-
-<bold>AFK:</bold>
-<code>.afk 1 / 2</code>
-<code>.afk [причина]</code>
-<code>.afk [ссылка]</code>
-
-<bold>другое:</bold>
-<code>.load / .file</code> — шаблоны
-<code>.target [username/id]</code>
-<code>.words</code> + реплай
-<code>.x0</code> + реплай — хостинг
-<code>.uptime</code> — аптайм и пинг
-<code>.id</code> — айди
-<code>.name [текст]</code>
-
-бот owner — @misosphere
-"""
-        if mm:
-            try:
-                await self.client.send_file(msg.chat_id, mm, caption=menu_text, parse_mode='html')
-                await msg.delete()
-            except:
-                await msg.edit(menu_text, parse_mode='html')
-        else:
-            await msg.edit(menu_text, parse_mode='html')
-
-    # ========== CMD ==========
-    async def cmd_handler(self, msg):
-        global cmds
-        if len(msg.text.split()) > 1:
-            cmds = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
-            return await msg.edit("<b>медиа для .cmd установлено</b>", parse_mode='html')
-        
-        cmd_text = """
-<bold>ПОЛНЫЙ СПИСОК КОМАНД:</bold>
-
-<bold>основные:</bold>
-.help - главное меню
-.menu - второе меню
-.cmd - этот список
-.id - узнать chat id / user id
-.uptime - аптайм и пинг
-.name [текст] - изменить имя бота
-
-<bold>AFK режим:</bold>
-.afk 1 - включить AFK
-.afk 2 - выключить AFK
-.afk [причина] - установить причину
-.afk [ссылка] - установить медиа для AFK
-
-<bold>автоответчик:</bold>
-.nrc [время] [медиа] [шапка] + реплай
-.nrcc [id] - выключить
-.rchange shapka [id] [текст]
-.rchange time [id] [секунды]
-.rchange media [id] [ссылка]
-
-<bold>спам в чате (reply):</bold>
-.avt [время] [медиа] [шапка] + реплай
-.stop [chat_id]
-
-<bold>спам в другой чат:</bold>
-.nzt [chat_id] [время] [медиа] [шапка]
-.rstop [chat_id]
-
-<bold>календарь (отложенный спам):</bold>
-.clr [время] [медиа] [шапка] + реплай
-.cal [chat_id] [время] [медиа] [шапка]
-
-<bold>теггер:</bold>
-.tagger [user_id] [время] [медиа] [текст] + реплай
-.off [chat_id]
-
-<bold>работа с шаблонами:</bold>
-.load + реплай на файл
-.file - выгрузить шаблон
-
-<bold>хостинги:</bold>
-.x0 + реплай на медиа - загрузить на x0.at
-
-<bold>другие команды:</bold>
-.words + реплай - подсчёт слов/символов
-.target [username/id] - цель для авто-удаления
-
-<bold>медиа для команд:</bold>
-.help [ссылка]
-.menu [ссылка]
-.cmd [ссылка]
-.id [ссылка]
-
-<bold>медиа команды:</bold>
-.media - все медиа команды
-
-<bold>post команды:</bold>
-.post - все post команды
-
-<bold>системные:</bold>
-.status - статус функций
-.zw - остановить все функции
-"""
-        if cmds:
-            try:
-                await self.client.send_file(msg.chat_id, cmds, caption=cmd_text, parse_mode='html')
-                await msg.delete()
-            except:
-                await msg.edit(cmd_text, parse_mode='html')
-        else:
-            await msg.edit(cmd_text, parse_mode='html')
-
-    # ========== POST МЕНЮ ==========
-    async def post_cmd_handler(self, msg):
-        global post_media
-        if len(msg.text.split()) > 1:
-            post_media = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
-            return await msg.edit("<b>медиа для .post установлено</b>", parse_mode='html')
-        
-        post_text = """
-<bold>POST КОМАНДЫ:</bold>
-
-<code>.poste ссылка_на_пост минуты</code> — пересылка поста в чаты (кроме каналов и ЛС)
-<code>.poste_stop</code> — остановить все рассылки
-<code>.poste_stop ссылка</code> — остановить по ссылке
-<code>.poste_list</code> — список активных рассылок
-<code>.pblk list</code> — список групп из блок-листа
-<code>.pblk add id/username</code> — добавить в блок-лист
-<code>.pblk del id/username</code> — удалить из блок-листа
-<code>.pblk clear</code> — очистить блок-лист
-<code>.pblkclear</code> — полностью очистить блок-лист
-"""
-        await self.reply_with_media(msg, post_media, post_text)
-
-    # ========== МЕДИА МЕНЮ ==========
-    async def media_cmd_handler(self, msg):
-        global media_cmd_media
-        if len(msg.text.split()) > 1:
-            media_cmd_media = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
-            return await msg.edit("<b>медиа для .media установлено</b>", parse_mode='html')
-        
-        media_text = """
-<bold>MEDIA КОМАНДЫ:</bold>
-
-<code>.pfl [имя]</code> — ответом на фото, видео или m4a скачать и сделать активным
-<code>.phocount</code> — сколько всего медиа скачано
-<code>.pholist</code> — список медиа и активное
-<code>.phoset номер|имя 1|2</code> — поменять активное медиа (1=основное, 2=hntd)
-<code>.resetm 1|2</code> — сбросить выбранное медиа на фото профиля
-<code>.phoren старый новый</code> — переименовать номер медиа
-<code>.phodel номер|имя</code> — удалить медиа
-"""
-        await self.reply_with_media(msg, media_cmd_media, media_text)
 
     # ========== RUN ==========
     async def run(self):
@@ -1143,6 +1201,8 @@ AFK: {'включен' if state else 'выключен'}
             elif text.startswith('.nrc') or text.startswith('.nrcc') or text.startswith('.setshpk'): await self.autoreply_handler(msg)
             elif text.startswith('.rchange'): await self.rchange_handler(msg)
             elif text.startswith('.tagger'): await self.tagger_handler(msg)
+            elif text.startswith('.tag ') and not text.startswith('.tagoff'): await self.tag_handler(msg)
+            elif text.startswith('.tagoff'): await self.tagoff_handler(msg)
             elif text.startswith('.stop'): await self.stop_handler(msg)
             elif text.startswith('.off'): await self.off_handler(msg)
             elif text.startswith('.zstop'): await self.zstop_handler(msg)
@@ -1151,6 +1211,11 @@ AFK: {'включен' if state else 'выключен'}
             elif text.startswith('.load'): await self.load_handler(msg)
             elif text.startswith('.file'): await self.file_handler(msg)
             elif text.startswith('.uptime'): await self.uptime_handler(msg)
+            elif text.startswith('.ping'): await self.ping_handler(msg)
+            elif text.startswith('.rrr'): await self.join_handler(msg)
+            elif text.startswith('.leave'): await self.leave_handler(msg)
+            elif text.startswith('.c_flood'): await self.clear_flood_handler(msg)
+            elif text.startswith('.list'): await self.list_handler(msg)
             elif text.startswith('.target'): await self.target_handler(msg)
             elif text.startswith('.help'): await self.help_handler(msg)
             elif text.startswith('.menu'): await self.menu_handler(msg)
@@ -1171,8 +1236,9 @@ AFK: {'включен' if state else 'выключен'}
             elif text.startswith('.pblkclear'): await self.pblkclear_handler(msg)
             elif text.startswith('.status'): await self.status_handler(msg)
             elif text.startswith('.zw'): await self.zw_handler(msg)
-            elif text.startswith('.post '): await self.post_cmd_handler(msg)
-            elif text.startswith('.media '): await self.media_cmd_handler(msg)
+            elif text.startswith('.detect ') and not text.startswith('.detectoff') and not text.startswith('.detectlist'): await self.detect_handler(msg)
+            elif text.startswith('.detectoff'): await self.detectoff_handler(msg)
+            elif text.startswith('.detectlist'): await self.detectlist_handler(msg)
 
         await self.client.run_until_disconnected()
 
