@@ -31,14 +31,10 @@ def run_web():
     port = int(os.environ.get("PORT", 8080))
     web_app.run(host="0.0.0.0", port=port)
 
-# ==================== ДАННЫЕ ДЛЯ ДВУХ АККАУНТОВ ====================
-ACCOUNT1_SESSION = 'session'
-ACCOUNT1_API_ID = 30843796
-ACCOUNT1_API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
-
-ACCOUNT2_SESSION = 'session2'
-ACCOUNT2_API_ID = 30843796
-ACCOUNT2_API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
+# ==================== ДАННЫЕ ДЛЯ АККАУНТА ====================
+SESSION_NAME = 'session2'
+API_ID = 30843796
+API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
 
 # ==================== ТЕКСТЫ ====================
 menutext = "<b>{}</b>\nвторой хелп - <code>.menu</code>\n\n остальные команды:\n<code>.words</code> + репл — количество слов в сообщении.\n<code>.load</code> + репл — смена шаблов бота.\n<code>.file</code> — основной шаблон бота.\n<code>.uptime</code> — аптайм.\n<code>.ping</code> — пинг.\n<code>.id</code> — узнать чат /юз айди\n<code>.x0</code> + репл — загрузить медию на хостинг\n\nthis chat id: <code>{}</code>\nyour user id: <code>{}</code>\nyour name: <code>{}</code>\nyour username: @{}</b>\nbot owner — <a href='.'>@misosphere</a></b>"
@@ -87,8 +83,8 @@ media_cmd_media = None
 
 # ==================== КЛАСС ЮЗЕРБОТА ====================
 class Userbot:
-    def __init__(self, session_name, api_id, api_hash):
-        self.client = TelegramClient(session_name, api_id, api_hash)
+    def __init__(self):
+        self.client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
         self.target_user = None
 
     async def get_args(self, msg):
@@ -1211,12 +1207,8 @@ AFK: {'включен' if state else 'выключен'}
 
         await self.client.run_until_disconnected()
 
-# ==================== ЗАПУСК ДВУХ АККАУНТОВ ====================
-async def run_bots():
-    bot1 = Userbot(ACCOUNT1_SESSION, ACCOUNT1_API_ID, ACCOUNT1_API_HASH)
-    bot2 = Userbot(ACCOUNT2_SESSION, ACCOUNT2_API_ID, ACCOUNT2_API_HASH)
-    await asyncio.gather(bot1.run(), bot2.run())
-
+# ==================== ЗАПУСК ====================
 if __name__ == "__main__":
     threading.Thread(target=run_web, daemon=True).start()
-    asyncio.run(run_bots())
+    bot = Userbot()
+    asyncio.run(bot.run())
