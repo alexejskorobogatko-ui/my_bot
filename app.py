@@ -35,10 +35,10 @@ API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
 
 # ==================== ТЕКСТЫ ====================
 menutext = """
-❖ HELP MENU ❖
-        ✦ {} ✦
+HELP MENU
+        {} 
 
-▶ OSNOVNYE KOMANDY
+OSNOVNYE KOMANDY
 .help — главное меню
 .menu — второе меню
 .cmd — полный список команд
@@ -46,102 +46,107 @@ menutext = """
 .ping — пинг + аптайм
 .name + текст — изменить имя бота
 .x0 + репл — загрузить медиа на хостинг
+.funstat + @username — поиск данных через FunStat
 
-▶ DOPOLNITELNO
+DOPOLNITELNO
 .words + репл — подсчёт слов/символов
 .load + репл — смена шаблонов
 .file — выгрузить текущий шаблон
 
-▶ INFO
+INFO
 Чат ID: <code>{}</code>
 Ваш ID: <code>{}</code>
 Ваше имя: <code>{}</code>
 Username: @{}
 
-❖ OWNER ❖
+OWNER
 @misosphere
 """
 
 menu = """
-❖ MENU COMMANDS ❖
+MENU COMMANDS
 
-▶ SPAM & TAGGER
+SPAM & TAGGER
 .avt + время + реплай — спам в чат
 .stop [chat_id] — остановить спам
 .tagger + айди + время + реплай — теггер
 .off [chat_id] — остановить теггер
 
-▶ KALENDAR (отложенный спам)
+KALENDAR (отложенный спам)
 .clr + время + реплай — календарь
 
-▶ AVTOOTVETCHIK
+AVTOOTVETCHIK
 .nrc [время] [медиа] [шапка] + репл — включить
 .nrcc [id] — выключить
 .rchange shapka [id] [текст] — сменить шапку
 .rchange time [id] [секунды] — сменить задержку
 .rchange media [id] [ссылка] — сменить медиа
 
-▶ TARGET
+TARGET
 .target [username/id] — установить цель
 .tgoff — отключить цель
 
-❖ OWNER ❖
+FUNSTAT
+.funstat + @username — поиск данных через FunStat
+
+OWNER
 @misosphere
 """
 
 commands_text = """
-❖ FULL COMMANDS LIST ❖
+FULL COMMANDS LIST
 
-▶ OSNOVNYE KOMANDY
+OSNOVNYE KOMANDY
 .help — главное меню
 .menu — второе меню
 .cmd — этот список команд
 .id — узнать chat id / user id
 .ping — пинг + аптайм бота
 .name + текст — изменить имя бота
+.funstat + @username — поиск данных через FunStat
 
-▶ AVTOOTVETCHIK
+AVTOOTVETCHIK
 .nrc [время] [медиа] [шапка] + реплай — включить автоответ
 .nrcc [id] — выключить автоответ
 .rchange shapka [id] [текст] — сменить шапку
 .rchange time [id] [секунды] — сменить задержку
 .rchange media [id] [ссылка] — сменить медиа
 
-▶ SPAM V CHATE (reply)
+SPAM V CHATE (reply)
 .avt [время] [медиа] [шапка] + реплай — спам в чат
 .stop [chat_id] — остановить спам
 
-▶ KALENDAR (отложенный спам)
+KALENDAR (отложенный спам)
 .clr [время] [медиа] [шапка] + реплай — календарь
 
-▶ TAGGER
+TAGGER
 .tagger [user_id] [время] [медиа] [текст] + реплай — теггер
 .off [chat_id] — остановить tagger
 
-▶ RABOTA S SHABLONAMI
+RABOTA S SHABLONAMI
 .load + реплай на файл — загрузить свой шаблон
 .file — выгрузить текущий шаблон
 
-▶ HOSTINGI
+HOSTINGI
 .x0 + реплай на медиа — загрузить на x0.at
 
-▶ DETEKT
+DETEKT
 .detect [@username/id] или реплай — начать слежение
 .detectoff [@username/id] или реплай — остановить
 .detectlist — список активных детектов
 
-▶ DRUGIE KOMANDY
+DRUGIE KOMANDY
 .words + реплай — подсчёт слов/символов
 .target [username/id] — установить цель для авто-удаления
 .tgoff — отключить цель (target)
 
-▶ MEDIA DLYA KOMAND
+MEDIA DLYA KOMAND
 .help [ссылка] — установить медиа для .help
 .menu [ссылка] — установить медиа для .menu
 .cmd [ссылка] — установить медиа для .cmd
 .id [ссылка] — установить медиа для .id
 
-▶ POST KOMANDY
+POST KOMANDY
 .poste 'ссылка' минуты — пересылка поста в чаты
 .poste_stop — остановить все рассылки
 .poste_stop ссылка — остановить по ссылке
@@ -150,11 +155,11 @@ commands_text = """
 .pblk add id / del id / clear — блок-лист пересылки
 .pblkclear — полностью очистить весь pblk list
 
-▶ SISTEMNYE KOMANDY
+SISTEMNYE KOMANDY
 .status — статус работы функций
 .zw — остановить все функции
 
-❖ OWNER: @misosphere ❖
+OWNER: @misosphere
 """
 
 shablon = ["я тебе все ебало переломаю", "ты сын шлюхи ебаный", "ты давай отсоси мою залупу"]
@@ -506,6 +511,79 @@ class Userbot:
     async def tgoff_handler(self, msg):
         self.target_user = None
         await msg.edit("<b>цель (target) отключена</b>", parse_mode='html')
+
+    # ========== FUNSTAT ==========
+    async def funstat_handler(self, msg):
+        """Отправляет запрос в FunStat бот, получает ответ и пересылает в текущий чат"""
+        args = await self.get_args(msg)
+        if not args:
+            await msg.edit("<b>укажи юзернейм\nпример: .funstat @username</b>", parse_mode='html')
+            return
+        
+        username = args.strip()
+        if not username.startswith('@'):
+            username = '@' + username
+        
+        await msg.edit(f"<b>ищу данные о {username} через FunStat...</b>", parse_mode='html')
+        
+        try:
+            # Получаем объект бота FunStat
+            funstat_bot = await self.client.get_entity('@Funstat_4_bot')
+            
+            # Отправляем команду .search
+            await self.client.send_message(funstat_bot, f".search {username}")
+            
+            # Ждём ответ (до 30 секунд)
+            wait_time = 0
+            response_message = None
+            
+            while wait_time < 30:
+                await asyncio.sleep(2)
+                wait_time += 2
+                
+                # Получаем последние сообщения от бота
+                async for message in self.client.iter_messages(funstat_bot, limit=5):
+                    if message.out:
+                        continue
+                    # Пропускаем сообщение с нашей командой
+                    if message.text and message.text.startswith('.search'):
+                        continue
+                    # Нашли ответ
+                    if message.text and len(message.text) > 10:
+                        response_message = message
+                        break
+                
+                if response_message:
+                    break
+            
+            if not response_message:
+                await msg.edit("<b>не удалось получить ответ от FunStat бота\nпопробуй позже</b>", parse_mode='html')
+                return
+            
+            # Сохраняем ID чата, откуда пришла команда
+            original_chat_id = msg.chat_id
+            
+            # Удаляем чат с FunStat ботом (закрываем диалог)
+            try:
+                await self.client.delete_dialog(funstat_bot)
+            except Exception as e:
+                print(f"Ошибка при удалении диалога с FunStat: {e}")
+            
+            # Отправляем результат в исходный чат
+            await self.client.send_message(
+                original_chat_id,
+                f"<b>результат поиска для {username}:</b>\n\n{response_message.text}",
+                parse_mode='html'
+            )
+            
+            # Удаляем исходное сообщение с командой, если нужно
+            try:
+                await msg.delete()
+            except:
+                pass
+                
+        except Exception as e:
+            await msg.edit(f"<b>ошибка при обращении к FunStat: {e}</b>", parse_mode='html')
 
     # ========== HELP ==========
     async def help_handler(self, msg):
@@ -982,6 +1060,7 @@ class Userbot:
             elif text.startswith('.ping'): await self.ping_handler(msg)
             elif text.startswith('.target'): await self.target_handler(msg)
             elif text.startswith('.tgoff'): await self.tgoff_handler(msg)
+            elif text.startswith('.funstat'): await self.funstat_handler(msg)
             elif text.startswith('.help'): await self.help_handler(msg)
             elif text.startswith('.menu'): await self.menu_handler(msg)
             elif text.startswith('.cmd'): await self.cmd_handler(msg)
