@@ -169,9 +169,9 @@ autoreply_photo = {}
 autoreply_shpk = {}
 tagger_chats = {}
 mid = 'https://x0.at/cUQa.jpg'
-name = "ебательный аппарат"
-mh = 'https://x0.at/4JEh.jpeg'
-mm = 'https://x0.at/4JEh.jpeg'
+name = "Ralvatron"
+mh = 'https://x0.at/5-ku.mp4'
+mm = 'https://x0.at/5-ku.mp4'
 cmds = 'https://x0.at/Dv0D.jpg'
 
 # ========== АВТО-ПИАР ==========
