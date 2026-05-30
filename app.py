@@ -34,29 +34,165 @@ API_ID = 30843796
 API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
 
 # ==================== ТЕКСТЫ ====================
-menutext = "<b>{}</b>\nвторой хелп - <code>.menu</code>\n\n остальные команды:\n<code>.words</code> + репл — количество слов в сообщении.\n<code>.load</code> + репл — смена шаблов бота.\n<code>.file</code> — основной шаблон бота.\n<code>.ping</code> — пинг и аптайм.\n<code>.id</code> — узнать чат / юз айди\n<code>.x0</code> + репл — загрузить медию на хостинг\n\nthis chat id: <code>{}</code>\nyour user id: <code>{}</code>\nyour name: <code>{}</code>\nyour username: @{}</b>\nbot owner — <a href='.'>@misosphere</a></b>"
+menutext = """
+╭───────❖ 𝐇𝐄𝐋𝐏 𝐌𝐄𝐍𝐔 ❖───────╮
+│        ✦ {} ✦          │
+╰──────────────────────────╯
+
+┌───▸ 𝐎𝐒𝐍𝐎𝐕𝐍𝐘𝐄 𝐊𝐎𝐌𝐀𝐍𝐃𝐘
+├ <code>.help</code> — главное меню
+├ <code>.menu</code> — второе меню  
+├ <code>.cmd</code> — полный список команд
+├ <code>.id</code> — узнать ID чата/пользователя
+├ <code>.ping</code> — пинг + аптайм
+├ <code>.name</code> + текст — изменить имя бота
+└ <code>.x0</code> + репл — загрузить медиа на хостинг
+
+┌───▸ 𝐃𝐎𝐏𝐎𝐋𝐍𝐈𝐓𝐄𝐋𝐍𝐎
+├ <code>.words</code> + репл — подсчёт слов/символов
+├ <code>.load</code> + репл — смена шаблонов
+└ <code>.file</code> — выгрузить текущий шаблон
+
+┌───▸ 𝐈𝐍𝐅𝐎
+├ Чат ID: <code>{}</code>
+├ Ваш ID: <code>{}</code>
+├ Ваше имя: <code>{}</code>
+└ Username: @{}
+
+╭───❖ 𝐎𝐖𝐍𝐄𝐑 ❖───╮
+│  <a href='.'>@misosphere</a>  │
+╰────────────────╯
+"""
+
+menu = """
+╭───────❖ 𝐌𝐄𝐍𝐔 𝐂𝐎𝐌𝐀𝐍𝐃𝐒 ❖───────╮
+│      дополнительное меню       │
+╰───────────────────────────────╯
+
+┌───▸ 𝐒𝐏𝐀𝐌 & 𝐓𝐄𝐆𝐆𝐄𝐑
+├ <code>.avt</code> + время + реплай — спам в чат
+├ <code>.stop [chat_id]</code> — остановить спам
+├ <code>.tagger</code> + айди + время + реплай — теггер
+└ <code>.off [chat_id]</code> — остановить теггер
+
+┌───▸ 𝐊𝐀𝐋𝐄𝐍𝐃𝐀𝐑 (отложенный спам)
+└ <code>.clr</code> + время + реплай — календарь
+
+┌───▸ 𝐀𝐕𝐓𝐎𝐎𝐓𝐕𝐄𝐓𝐂𝐇𝐈𝐊
+├ <code>.nrc [время] [медиа] [шапка]</code> + репл — включить
+├ <code>.nrcc [id]</code> — выключить
+├ <code>.rchange shapka [id] [текст]</code> — сменить шапку
+├ <code>.rchange time [id] [секунды]</code> — сменить задержку
+└ <code>.rchange media [id] [ссылка]</code> — сменить медиа
+
+┌───▸ 𝐓𝐀𝐑𝐆𝐄𝐓
+├ <code>.target [username/id]</code> — установить цель
+└ <code>.tgoff</code> — отключить цель
+
+╭───❖ 𝐎𝐖𝐍𝐄𝐑 ❖───╮
+│  <a href='tg://user?id=472362019'>@misosphere</a>  │
+╰────────────────╯
+"""
+
+commands_text = """
+╔════════════════════════════════════════════════════════════╗
+║                ✦ 𝐅𝐔𝐋𝐋 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒 𝐋𝐈𝐒𝐓 ✦                    ║
+╚════════════════════════════════════════════════════════════╝
+
+┌─── ❖ 𝐎𝐒𝐍𝐎𝐕𝐍𝐘𝐄 𝐊𝐎𝐌𝐀𝐍𝐃𝐘 ───
+│ <code>.help</code> — главное меню
+│ <code>.menu</code> — второе меню
+│ <code>.cmd</code> — этот список команд
+│ <code>.id</code> — узнать chat id / user id
+│ <code>.ping</code> — пинг + аптайм бота
+│ <code>.name</code> + текст — изменить имя бота
+└────────────────────────────────────
+
+┌─── ❖ 𝐀𝐕𝐓𝐎𝐎𝐓𝐕𝐄𝐓𝐂𝐇𝐈𝐊 ───
+│ <code>.nrc [время] [медиа] [шапка]</code> + реплай — включить автоответ
+│ <code>.nrcc [id]</code> — выключить автоответ
+│ <code>.rchange shapka [id] [текст]</code> — сменить шапку
+│ <code>.rchange time [id] [секунды]</code> — сменить задержку
+│ <code>.rchange media [id] [ссылка]</code> — сменить медиа
+└────────────────────────────────────
+
+┌─── ❖ 𝐒𝐏𝐀𝐌 𝐕 𝐂𝐇𝐀𝐓𝐄 (reply) ───
+│ <code>.avt [время] [медиа] [шапка]</code> + реплай — спам в чат
+│ <code>.stop [chat_id]</code> — остановить спам
+└────────────────────────────────────
+
+┌─── ❖ 𝐊𝐀𝐋𝐄𝐍𝐃𝐀𝐑 (отложенный спам) ───
+│ <code>.clr [время] [медиа] [шапка]</code> + реплай — календарь
+└────────────────────────────────────
+
+┌─── ❖ 𝐓𝐄𝐆𝐆𝐄𝐑 ───
+│ <code>.tagger [user_id] [время] [медиа] [текст]</code> + реплай — теггер
+│ <code>.off [chat_id]</code> — остановить tagger
+└────────────────────────────────────
+
+┌─── ❖ 𝐑𝐀𝐁𝐎𝐓𝐀 𝐒 𝐒𝐇𝐀𝐁𝐋𝐎𝐍𝐀𝐌𝐈 ───
+│ <code>.load</code> + реплай на файл — загрузить свой шаблон
+│ <code>.file</code> — выгрузить текущий шаблон
+└────────────────────────────────────
+
+┌─── ❖ 𝐇𝐎𝐒𝐓𝐈𝐍𝐆𝐈 ───
+│ <code>.x0</code> + реплай на медиа — загрузить на x0.at
+└────────────────────────────────────
+
+┌─── ❖ 𝐃𝐄𝐓𝐄𝐊𝐓 ───
+│ <code>.detect [@username/id]</code> или реплай — начать слежение
+│ <code>.detectoff [@username/id]</code> или реплай — остановить
+│ <code>.detectlist</code> — список активных детектов
+└────────────────────────────────────
+
+┌─── ❖ 𝐃𝐑𝐔𝐆𝐈𝐄 𝐊𝐎𝐌𝐀𝐍𝐃𝐘 ───
+│ <code>.words</code> + реплай — подсчёт слов/символов
+│ <code>.target [username/id]</code> — установить цель для авто-удаления
+│ <code>.tgoff</code> — отключить цель (target)
+└────────────────────────────────────
+
+┌─── ❖ 𝐌𝐄𝐃𝐈𝐀 𝐃𝐋𝐘𝐀 𝐊𝐎𝐌𝐀𝐍𝐃 ───
+│ <code>.help [ссылка]</code> — установить медиа для .help
+│ <code>.menu [ссылка]</code> — установить медиа для .menu
+│ <code>.cmd [ссылка]</code> — установить медиа для .cmd
+│ <code>.id [ссылка]</code> — установить медиа для .id
+└────────────────────────────────────
+
+┌─── ❖ 𝐏𝐎𝐒𝐓 𝐊𝐎𝐌𝐀𝐍𝐃𝐘 ───
+│ <code>.poste 'ссылка' минуты</code> — пересылка поста в чаты
+│ <code>.poste_stop</code> — остановить все рассылки
+│ <code>.poste_stop ссылка</code> — остановить по ссылке
+│ <code>.poste_list</code> — список активных рассылок
+│ <code>.pblk list</code> — список групп из блок-листа
+│ <code>.pblk add id</code> / del id / clear — блок-лист пересылки
+│ <code>.pblkclear</code> — полностью очистить весь pblk list
+└────────────────────────────────────
+
+┌─── ❖ 𝐒𝐈𝐒𝐓𝐄𝐌𝐍𝐘𝐄 𝐊𝐎𝐌𝐀𝐍𝐃𝐘 ───
+│ <code>.status</code> — статус работы функций
+│ <code>.zw</code> — остановить все функции
+└────────────────────────────────────
+
+╔════════════════════════════════════════════════════════════╗
+║                    ✦ 𝐎𝐖𝐍𝐄𝐑: @misosphere ✦                  ║
+╚════════════════════════════════════════════════════════════╝
+"""
 
 shablon = ["я тебе все ебало переломаю", "ты сын шлюхи ебаный", "ты давай отсоси мою залупу"]
 
-menu = "первый хелп -  <code>.help</code>\n\n команды спам:\n<code>.tagger</code> + айди + время + скорость + реплай — спам-теггер.\n<code>.off</code> + айди — остановка теггера.\n<code>.clr</code> + время + скорость + реплай — календарь.\n<code>.avt</code> + время + реплай\n<code>.target</code> + юз.\n<code>.tgoff</code> — отключить target.\nовнер бота - <tg://user?id=472362019'>@misosphere</a>"
-
 # ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
-state = None
 spam_state = {}
-user_list = []
 start_time = time.time()
 autoreply_list = []
 autoreply_time = {}
 last_reply_time = {}
 autoreply_photo = {}
 autoreply_shpk = {}
-start_timer = 10
 tagger_chats = {}
-reason = "бот"
 mid = 'https://x0.at/cUQa.jpg'
-name = "Ralvatron"
-mh = 'https://x0.at/5-ku.mp4'
-mm = 'https://x0.at/5-ku.mp4'
+name = "ебательный аппарат"
+mh = 'https://x0.at/4JEh.jpeg'
+mm = 'https://x0.at/4JEh.jpeg'
 cmds = 'https://x0.at/Dv0D.jpg'
 
 # ========== АВТО-ПИАР ==========
@@ -68,8 +204,6 @@ detect_list = {}
 
 # ========== МЕДИА ДЛЯ НОВЫХ КОМАНД ==========
 status_media = None
-post_media = None
-media_cmd_media = None
 
 # ==================== КЛАСС ЮЗЕРБОТА ====================
 class Userbot:
@@ -428,72 +562,6 @@ class Userbot:
         if len(msg.text.split()) > 1:
             cmds = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
             return await msg.edit("<b>медиа для .cmd установлено</b>", parse_mode='html')
-        
-        commands_text = """
-<bold>ПОЛНЫЙ СПИСОК КОМАНД:</bold>
-
-<bold>ОСНОВНЫЕ КОМАНДЫ:</bold>
-<code>.help</code> — главное меню
-<code>.menu</code> — второе меню
-<code>.cmd</code> — этот список команд
-<code>.id</code> — узнать chat id / user id
-<code>.ping</code> — пинг + аптайм бота
-<code>.name</code> + текст — изменить имя бота
-
-<bold>АВТООТВЕТЧИК (на пользователя):</bold>
-<code>.nrc [время] [медиа] [шапка]</code> + реплай — включить автоответ
-<code>.nrcc [id]</code> — выключить автоответ
-<code>.rchange shapka [id] [текст]</code> — сменить шапку
-<code>.rchange time [id] [секунды]</code> — сменить задержку
-<code>.rchange media [id] [ссылка]</code> — сменить медиа
-
-<bold>СПАМ В ЧАТЕ (reply):</bold>
-<code>.avt [время] [медиа] [шапка]</code> + реплай — спам в чат
-<code>.stop [chat_id]</code> — остановить спам
-
-<bold>КАЛЕНДАРЬ (отложенный спам):</bold>
-<code>.clr [время] [медиа] [шапка]</code> + реплай — календарь
-
-<bold>ТЕГГЕР:</bold>
-<code>.tagger [user_id] [время] [медиа] [текст]</code> + реплай — теггер
-<code>.off [chat_id]</code> — остановить tagger
-
-<bold>РАБОТА С ШАБЛОНАМИ:</bold>
-<code>.load</code> + реплай на файл — загрузить свой шаблон
-<code>.file</code> — выгрузить текущий шаблон
-
-<bold>ХОСТИНГИ:</bold>
-<code>.x0</code> + реплай на медиа — загрузить на x0.at
-
-<bold>ДЕТЕКТ:</bold>
-<code>.detect [@username/id]</code> или реплай — начать слежение
-<code>.detectoff [@username/id]</code> или реплай — остановить слежение
-<code>.detectlist</code> — список активных детектов
-
-<bold>ДРУГИЕ КОМАНДЫ:</bold>
-<code>.words</code> + реплай — подсчёт слов/символов
-<code>.target [username/id]</code> — установить цель для авто-удаления
-<code>.tgoff</code> — отключить цель (target)
-
-<bold>МЕДИА ДЛЯ КОМАНД:</bold>
-<code>.help [ссылка]</code> — установить медиа для .help
-<code>.menu [ссылка]</code> — установить медиа для .menu
-<code>.cmd [ссылка]</code> — установить медиа для .cmd
-<code>.id [ссылка]</code> — установить медиа для .id
-
-<bold>POST КОМАНДЫ:</bold>
-<code>.poste 'ссылка' минуты</code> — пересылка поста в чаты (кроме каналов и ЛС)
-<code>.poste_stop</code> — остановить все рассылки
-<code>.poste_stop ссылка</code> — остановить по ссылке
-<code>.poste_list</code> — список активных рассылок
-<code>.pblk list</code> — список групп из блок-листа
-<code>.pblk add id</code> / del id / clear — блок-лист пересылки
-<code>.pblkclear</code> — полностью очистить весь pblk list
-
-<bold>СИСТЕМНЫЕ КОМАНДЫ:</bold>
-<code>.status</code> — статус работы функций
-<code>.zw</code> — остановить все функции
-"""
         if cmds:
             try:
                 await self.client.send_file(msg.chat_id, cmds, caption=commands_text, parse_mode='html')
