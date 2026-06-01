@@ -63,30 +63,29 @@ OWNER
 """
 
 menu = """
-MENU COMMANDS
+MENU
 
-SPAM & TAGGER
-.avt + время + реплай — спам в чат
-.stop [chat_id] — остановить спам
-.tagger + айди + время + реплай — теггер
-.off [chat_id] — остановить теггер
+SPAM
+.avt 5 — спам в чат (реплай)
+.stop — остановить
 
-KALENDAR (отложенный спам)
-.clr + время + реплай — календарь
+TAGGER
+.tagger 123456789 5 текст — теггер + реплай
+.off — остановить
 
-AVTOOTVETCHIK
-.nrc [время] [медиа] [шапка] + репл — включить
-.nrcc [id] — выключить
-.rchange shapka [id] [текст] — сменить шапку
-.rchange time [id] [секунды] — сменить задержку
-.rchange media [id] [ссылка] — сменить медиа
+AVTOOTVET
+.nrc текст — включить на реплай
+.nrcc — выключить
+.rchange shapka/id/time/media — изменить
+
+KALENDAR
+.clr 5 — отложенный спам (реплай)
 
 TARGET
-.target [username/id] — установить цель
-.tgoff — отключить цель
+.target @username 30 — установить цель на 30 мин
+.tgoff — отключить досрочно
 
-OWNER
-@misosphere
+OWNER: @misosphere
 """
 
 commands_text = """
@@ -132,7 +131,7 @@ DETEKT
 
 DRUGIE KOMANDY
 .words + реплай — подсчёт слов/символов
-.target [username/id] — установить цель для авто-удаления
+.target [username/id] [минуты] — установить цель с таймером
 .tgoff — отключить цель (target)
 
 MEDIA DLYA KOMAND
@@ -184,11 +183,18 @@ detect_list = {}
 # ========== МЕДИА ДЛЯ НОВЫХ КОМАНД ==========
 status_media = None
 
+# ========== TARGET TIMER ==========
+target_timer = None
+target_chat_id = None
+target_name_or_id = None
+
 # ==================== КЛАСС ЮЗЕРБОТА ====================
 class Userbot:
     def __init__(self):
         self.client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
         self.target_user = None
+        self.target_timer_task = None
+        self.target_chat_id_for_timer = None
 
     async def get_args(self, msg):
         try:
@@ -473,12 +479,11 @@ class Userbot:
         os.remove('texts.txt')
         await msg.delete()
 
-    # ========== PING + UPTIME (ИСПРАВЛЕН) ==========
+    # ========== PING + UPTIME ==========
     async def ping_handler(self, msg):
         bot_runtime = int(time.time() - start_time)
         uptime_str = str(timedelta(seconds=bot_runtime))
         
-        # Правильный расчёт пинга
         start_ping = time.time()
         await msg.edit("<b>измеряю пинг...</b>", parse_mode='html')
         end_ping = time.time()
@@ -501,16 +506,64 @@ class Userbot:
         if chat_id in tagger_chats: del tagger_chats[chat_id]
         await msg.edit(f"<b>остановлено в чате <code>{chat_id}</code></b>", parse_mode='html')
 
+    # ========== TARGET С ТАЙМЕРОМ ==========
     async def target_handler(self, msg):
         args = await self.get_args(msg)
-        if args:
-            self.target_user = args.strip().replace('@', '')
-            await msg.edit(f"цель: <code>{self.target_user}</code>", parse_mode='html')
-        else: await msg.edit("<b>укажи юзернейм или ID</b>", parse_mode='html')
+        if not args:
+            await msg.edit("<b>укажи юзернейм или ID и время в минутах\nпример: .target @username 30</b>", parse_mode='html')
+            return
+        
+        parts = args.strip().split()
+        if len(parts) < 2:
+            await msg.edit("<b>укажи время в минутах\nпример: .target @username 30</b>", parse_mode='html')
+            return
+        
+        target_input = parts[0]
+        try:
+            minutes = int(parts[1])
+        except ValueError:
+            await msg.edit("<b>время должно быть числом (минуты)</b>", parse_mode='html')
+            return
+        
+        if minutes < 1:
+            await msg.edit("<b>минимальное время - 1 минута</b>", parse_mode='html')
+            return
+        
+        # Сохраняем цель
+        self.target_user = target_input.strip().replace('@', '')
+        target_display = self.target_user if self.target_user.startswith('@') else '@' + self.target_user
+        target_display = target_input  # сохраняем как ввели
+        
+        # Сохраняем чат для уведомления
+        self.target_chat_id_for_timer = msg.chat_id
+        
+        # Отменяем старый таймер если был
+        if hasattr(self, '_target_timer_task') and self._target_timer_task and not self._target_timer_task.done():
+            self._target_timer_task.cancel()
+        
+        # Запускаем новый таймер
+        async def disable_target():
+            await asyncio.sleep(minutes * 60)
+            if self.target_user:
+                # Определяем как показывать цель
+                display = target_input
+                await self.client.send_message(
+                    self.target_chat_id_for_timer,
+                    f"Время вышло. Цель: {display} отключена"
+                )
+                self.target_user = None
+                self.target_chat_id_for_timer = None
+        
+        self._target_timer_task = asyncio.create_task(disable_target())
+        
+        await msg.edit(f"Цель: {target_input} установлена. Автоотключение через {minutes} минут", parse_mode='html')
 
     async def tgoff_handler(self, msg):
+        if hasattr(self, '_target_timer_task') and self._target_timer_task and not self._target_timer_task.done():
+            self._target_timer_task.cancel()
         self.target_user = None
-        await msg.edit("<b>цель (target) отключена</b>", parse_mode='html')
+        self.target_chat_id_for_timer = None
+        await msg.edit("<b>Цель отключена</b>", parse_mode='html')
 
     # ========== HELP ==========
     async def help_handler(self, msg):
@@ -948,7 +1001,11 @@ class Userbot:
                     task.cancel()
         detect_list.clear()
         
+        # Отключаем target и отменяем таймер
+        if hasattr(self, '_target_timer_task') and self._target_timer_task and not self._target_timer_task.done():
+            self._target_timer_task.cancel()
         self.target_user = None
+        self.target_chat_id_for_timer = None
         
         await msg.edit("<bold>все функции остановлены</bold>", parse_mode='html')
 
