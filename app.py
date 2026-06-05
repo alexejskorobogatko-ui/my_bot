@@ -381,7 +381,7 @@ class Userbot:
                 task = asyncio.create_task(wait_and_notify())
                 detect_list[chat_id][user_id]['task'] = task
 
-    # ========== СПАМ ==========
+    # ========== СПАМ (ОБЪЕДИНЕНИЕ ТЕКСТА И ШАБЛОНА) ==========
     async def renewal_handler(self, msg):
         global spam_state
         args = await self.get_args(msg)
@@ -411,11 +411,14 @@ class Userbot:
         
         while chat_id in spam_state and spam_state[chat_id]:
             try:
-                # Выбираем текст для отправки
+                # Выбираем случайную фразу из шаблона
+                random_phrase = choice(current_shablon) if current_shablon else ""
+                
+                # Объединяем свой текст (если есть) с фразой из шаблона
                 if custom_text:
-                    send_text = custom_text
+                    send_text = f"{custom_text} {random_phrase}".strip()
                 else:
-                    send_text = choice(current_shablon) if current_shablon else ""
+                    send_text = random_phrase
                 
                 if media_path:
                     await msg.respond(send_text, file=media_path, reply_to=reply.id if reply else None)
@@ -428,7 +431,7 @@ class Userbot:
         if chat_id in spam_state:
             del spam_state[chat_id]
 
-    # ========== КАЛЕНДАРЬ ==========
+    # ========== КАЛЕНДАРЬ (ОБЪЕДИНЕНИЕ ТЕКСТА И ШАБЛОНА) ==========
     async def kalendar_handler(self, msg):
         args = await self.get_args(msg)
         if not args:
@@ -444,7 +447,13 @@ class Userbot:
         
         media_id, custom_text = self.parse_media_and_text(parts[1:])
         media_path = get_media_path(media_id) if media_id else None
-        send_text = custom_text if custom_text else (choice(current_shablon) if current_shablon else "")
+        
+        # Выбираем случайную фразу из шаблона и объединяем со своим текстом
+        random_phrase = choice(current_shablon) if current_shablon else ""
+        if custom_text:
+            send_text = f"{custom_text} {random_phrase}".strip()
+        else:
+            send_text = random_phrase
         
         await msg.edit(f"<b>Календарь запущен. Первое сообщение:</b>", parse_mode='html')
         
@@ -463,7 +472,7 @@ class Userbot:
                 await msg.respond(send_text, schedule=schedule_date.timestamp())
             await asyncio.sleep(0)
 
-    # ========== ТЕГГЕР ==========
+    # ========== ТЕГГЕР (ОБЪЕДИНЕНИЕ ТЕКСТА, ШАБЛОНА И ТЕГА) ==========
     async def tagger_handler(self, msg):
         args = await self.get_args(msg)
         if not args:
@@ -496,13 +505,16 @@ class Userbot:
         await msg.edit(f'<b>Теггер включен\nВыкл: <code>.off {chat_id}</code></b>', parse_mode='html')
         
         while chat_id in tagger_chats:
-            # Берём текст: если свой - свой, если нет - из шаблона
-            if custom_text:
-                base_text = custom_text
-            else:
-                base_text = choice(current_shablon) if current_shablon else ""
+            # Выбираем случайную фразу из шаблона
+            random_phrase = choice(current_shablon) if current_shablon else ""
             
-            text = f"{base_text} <a href='tg://user?id={user_id}'>{choice(current_shablon) if not custom_text else ''}</a>"
+            # Формируем текст тега
+            if custom_text:
+                base_text = f"{custom_text} {random_phrase}".strip()
+            else:
+                base_text = random_phrase
+            
+            text = f"{base_text} <a href='tg://user?id={user_id}'>{choice(current_shablon)}</a>"
             try:
                 if media_path:
                     await self.client.send_file(chat_id, media_path, caption=text, parse_mode='html')
