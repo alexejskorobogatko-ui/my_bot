@@ -4,6 +4,7 @@ import sys
 import time
 import asyncio
 import threading
+import glob
 from random import choice
 from datetime import datetime, timedelta
 
@@ -12,6 +13,7 @@ import requests
 from flask import Flask
 from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError
+from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
 
 # Windows fix
 if sys.platform == 'win32':
@@ -33,146 +35,97 @@ SESSION_NAME = 'session2'
 API_ID = 30843796
 API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
 
-# ==================== ТЕКСТЫ ====================
-menutext = """
-HELP MENU
-        {} 
+# ==================== ПУТИ ДЛЯ ФАЙЛОВ ====================
+TEMPLATES_DIR = "templates"
+MEDIA_DIR = "media"
 
-OSNOVNYE KOMANDY
-.help — главное меню
-.menu — второе меню
-.cmd — полный список команд
-.id — узнать ID чата/пользователя
-.ping — пинг + аптайм
-.name + текст — изменить имя бота
-.x0 + репл — загрузить медиа на хостинг
+# Создаём папки если их нет
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
+os.makedirs(MEDIA_DIR, exist_ok=True)
 
-DOPOLNITELNO
-.words + репл — подсчёт слов/символов
-.load + репл — смена шаблонов
-.file — выгрузить текущий шаблон
+# ==================== ШАБЛОНЫ ПО УМОЛЧАНИЮ ====================
+DEFAULT_SHABLON = [
+    "садовыми ножницами исполосоваю сонную артерию твоей мамаши",
+    "из вырезанных голов твоей родословной построю пьедестал",
+    "экзартикуляционирую вульву твоей матери да бы её пробило на красный фонтан метаморфозы",
+    "вывалю путем эякуляции твои кишки в ванну, и заставлю купаться тебя в этом бульоне",
+    "раздербеню твои атрофированные рёбра словно гнилую ограду",
+    "даже трупные черви скулят от амбре развороченной могилы твоей родни",
+    "отвар из твоих квашенных костей вылью в канализацию",
+    "твоя морда это адов тигель где плавится дерьмище, но я лишь вычерпаю это ведром и вылью тебе в глотачку",
+    "твои узурпированные кости это меловые скрижали на которых я вырежу историю твоего падения, а из твоих переёбаных рёбер сложу алтарь своему презрению",
+    "вспорю твой живот хуём вместо ножа, дабы вынуть кишечнополостные трубы и сплести из них удавку",
+]
 
-INFO
-Чат ID: <code>{}</code>
-Ваш ID: <code>{}</code>
-Ваше имя: <code>{}</code>
-Username: @{}
-
-OWNER
-@misosphere
-"""
-
-menu = """
-MENU COMMANDS
-
-SPAM & TAGGER
-.avt + время + реплай — спам в чат
-.stop [chat_id] — остановить спам
-.tagger + айди + время + реплай — теггер
-.off [chat_id] — остановить теггер
-
-KALENDAR (отложенный спам)
-.clr + время + реплай — календарь
-
-AVTOOTVETCHIK
-.nrc [время] [медиа] [шапка] + репл — включить
-.nrcc [id] — выключить
-.rchange shapka [id] [текст] — сменить шапку
-.rchange time [id] [секунды] — сменить задержку
-.rchange media [id] [ссылка] — сменить медиа
-
-TARGET
-.target [username/id] [минуты] — установить цель с таймером
-.tgoff — отключить цель
-
-OWNER
-@misosphere
-"""
-
-commands_text = """
-FULL COMMANDS LIST
-
-OSNOVNYE KOMANDY
-.help — главное меню
-.menu — второе меню
-.cmd — этот список команд
-.id — узнать chat id / user id
-.ping — пинг + аптайм бота
-.name + текст — изменить имя бота
-
-AVTOOTVETCHIK
-.nrc [время] [медиа] [шапка] + реплай — включить автоответ
-.nrcc [id] — выключить автоответ
-.rchange shapka [id] [текст] — сменить шапку
-.rchange time [id] [секунды] — сменить задержку
-.rchange media [id] [ссылка] — сменить медиа
-
-SPAM V CHATE (reply)
-.avt [время] [медиа] [шапка] + реплай — спам в чат
-.stop [chat_id] — остановить спам
-
-KALENDAR (отложенный спам)
-.clr [время] [медиа] [шапка] + реплай — календарь
-
-TAGGER
-.tagger [user_id] [время] [медиа] [текст] + реплай — теггер
-.off [chat_id] — остановить tagger
-
-RABOTA S SHABLONAMI
-.load + реплай на файл — загрузить свой шаблон
-.file — выгрузить текущий шаблон
-
-HOSTINGI
-.x0 + реплай на медиа — загрузить на x0.at
-
-DETEKT
-.detect [@username/id] или реплай — начать слежение
-.detectoff [@username/id] или реплай — остановить
-.detectlist — список активных детектов
-
-DRUGIE KOMANDY
-.words + реплай — подсчёт слов/символов
-.target [username/id] [минуты] — установить цель с таймером
-.tgoff — отключить цель (target)
-
-MEDIA DLYA KOMAND
-.help [ссылка] — установить медиа для .help
-.menu [ссылка] — установить медиа для .menu
-.cmd [ссылка] — установить медиа для .cmd
-.id [ссылка] — установить медиа для .id
-
-POST KOMANDY
-.poste 'ссылка' минуты — пересылка поста в чаты
-.poste_stop — остановить все рассылки
-.poste_stop ссылка — остановить по ссылке
-.poste_list — список активных рассылок
-.pblk list — список групп из блок-листа
-.pblk add id / del id / clear — блок-лист пересылки
-.pblkclear — полностью очистить весь pblk list
-
-SISTEMNYE KOMANDY
-.status — статус работы функций
-.zw — остановить все функции
-
-OWNER: @misosphere
-"""
-
-shablon = ["я тебе все ебало переломаю", "ты сын шлюхи ебаный", "ты давай отсоси мою залупу"]
+# Сохраняем шаблон по умолчанию в файл, если его нет
+default_template_path = os.path.join(TEMPLATES_DIR, "main.txt")
+if not os.path.exists(default_template_path):
+    with open(default_template_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(DEFAULT_SHABLON))
 
 # ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
 spam_state = {}
 start_time = time.time()
-autoreply_list = []
-autoreply_time = {}
-last_reply_time = {}
-autoreply_photo = {}
-autoreply_shpk = {}
 tagger_chats = {}
 mid = 'https://x0.at/cUQa.jpg'
 name = "Ralvatron"
 mh = 'https://x0.at/5-ku.mp4'
 mm = 'https://x0.at/5-ku.mp4'
 cmds = 'https://x0.at/Dv0D.jpg'
+status_media = None
+
+# ========== ТЕКУЩИЙ ШАБЛОН ==========
+current_shablon = []
+current_template_name = "main"
+
+# Загружаем шаблон по умолчанию
+def load_template(template_name):
+    global current_shablon, current_template_name
+    template_path = os.path.join(TEMPLATES_DIR, f"{template_name}.txt")
+    if os.path.exists(template_path):
+        with open(template_path, 'r', encoding='utf-8') as f:
+            current_shablon = [line.strip() for line in f.readlines() if line.strip()]
+        current_template_name = template_name
+        return True
+    return False
+
+# Загружаем основной шаблон при старте
+load_template("main")
+
+# ========== МЕДИА ХРАНИЛИЩЕ ==========
+def get_media_path(media_id):
+    """Поиск файла медиа по ID (любое расширение)"""
+    pattern = os.path.join(MEDIA_DIR, f"{media_id}.*")
+    files = glob.glob(pattern)
+    if files:
+        return files[0]
+    return None
+
+def save_media(media_id, file_data, extension):
+    """Сохранение медиа файла"""
+    file_path = os.path.join(MEDIA_DIR, f"{media_id}.{extension}")
+    with open(file_path, 'wb') as f:
+        f.write(file_data)
+    return file_path
+
+def delete_media(media_id):
+    """Удаление медиа файла"""
+    file_path = get_media_path(media_id)
+    if file_path:
+        os.remove(file_path)
+        return True
+    return False
+
+def get_all_media():
+    """Список всех сохранённых медиа"""
+    files = glob.glob(os.path.join(MEDIA_DIR, "*.*"))
+    result = []
+    for f in files:
+        basename = os.path.basename(f)
+        name, ext = os.path.splitext(basename)
+        size = os.path.getsize(f)
+        result.append((name, ext[1:], size))
+    return result
 
 # ========== АВТО-ПИАР ==========
 poste_list = {}
@@ -181,8 +134,142 @@ poste_blocklist = []
 # ========== DETECT ==========
 detect_list = {}
 
-# ========== МЕДИА ДЛЯ НОВЫХ КОМАНД ==========
-status_media = None
+# ========== ПИНГ СТАТИСТИКА ==========
+ping_history = []
+
+# ==================== ТЕКСТЫ МЕНЮ ====================
+menutext = """
+⛧ Основное меню ⛧
+
+<b><code>.help</code></b> — главное меню
+<b><code>.menu</code></b> — спам и теггер
+<b><code>.more</code></b> — дополнительные функции
+<b><code>.custom</code></b> — настройки кастомизации
+<b><code>.rasset</code></b> — настройки рассылки
+<b><code>.times</code></b> — время работы бота
+<b><code>.files</code></b> — TXT шаблоны
+<b><code>.id</code></b> — ID чата/пользователя
+<b><code>.ping</code></b> — пинг + аптайм
+<b><code>.name</code></b> + текст — изменить имя бота
+"""
+
+menu = """
+⛧ Спам и теггер ⛧
+
+<b><code>.avt + время + реплай</code></b> — спам в чат
+<b><code>.stop [chat_id]</code></b> — остановить спам
+<b><code>.tagger + айди + время + реплай</code></b> — теггер
+<b><code>.off [chat_id]</code></b> — остановить теггер
+<b><code>.clr + время + реплай</code></b> — календарь
+"""
+
+more_text = """
+✮ Дополнительные функции ✮
+
+<b><code>.shb list</code></b> — список шаблонов фраз
+<b><code>.shb load [номер]</code></b> — загрузить шаблон
+<b><code>.med save [номер]</code></b> + реплай — сохранить медиа
+<b><code>.med list</code></b> — список медиа
+<b><code>.med send [номер]</code></b> — отправить медиа
+<b><code>.med del [номер]</code></b> — удалить медиа
+<b><code>.autodel + time</code></b> — автоудаление сообщений
+<b><code>.scrape + Chat ID</code></b> — выгрузка списка чата
+<b><code>.check + реплай</code></b> — проверка транслитерации
+"""
+
+custom_text = """
+⛧ Настройки кастомизации ⛧
+
+<b><code>.help [ссылка]</code></b> — медиа для .help
+<b><code>.menu [ссылка]</code></b> — медиа для .menu
+<b><code>.more [ссылка]</code></b> — медиа для .more
+<b><code>.cmd [ссылка]</code></b> — медиа для .cmd
+<b><code>.id [ссылка]</code></b> — медиа для .id
+<b><code>.status [ссылка]</code></b> — медиа для .status
+"""
+
+rasset_text = """
+⛧ Настройки рассылки ⛧
+
+<b><code>.poste 'ссылка' минуты</code></b> — запуск рассылки
+<b><code>.poste_stop</code></b> — остановить все
+<b><code>.poste_stop ссылка</code></b> — остановить по ссылке
+<b><code>.poste_list</code></b> — список активных рассылок
+<b><code>.pblk list</code></b> — список блок-листа
+<b><code>.pblk add id</code></b> — добавить в блок
+<b><code>.pblk del id</code></b> — удалить из блока
+<b><code>.pblk clear</code></b> — очистить блок-лист
+<b><code>.pblkclear</code></b> — очистить всё
+"""
+
+times_text = """
+⛧ Время работы бота ⛧
+
+<b><code>.ping</code></b> — пинг + аптайм + статистика
+<b><code>.status</code></b> — статус функций
+<b><code>.zw</code></b> — остановить все функции
+"""
+
+files_text = """
+⛧ TXT шаблоны ⛧
+
+<b><code>.load + реплай на файл</code></b> — загрузить шаблон
+<b><code>.file</code></b> — выгрузить текущий шаблон
+"""
+
+commands_text = """
+⛧ Полный список команд ⛧
+
+✮ Основные команды ✮
+<b><code>.help</code></b> — главное меню
+<b><code>.menu</code></b> — спам и теггер
+<b><code>.more</code></b> — доп. функции
+<b><code>.custom</code></b> — настройки кастомизации
+<b><code>.rasset</code></b> — настройки рассылки
+<b><code>.times</code></b> — время работы
+<b><code>.files</code></b> — TXT шаблоны
+<b><code>.id</code></b> — ID чата/пользователя
+<b><code>.ping</code></b> — пинг + аптайм + статистика
+<b><code>.name</code></b> + текст — изменить имя
+<b><code>.x0 + репл</code></b> — загрузить медиа на хостинг
+<b><code>.words + репл</code></b> — подсчёт слов/символов
+<b><code>.load + репл</code></b> — смена шаблонов
+<b><code>.file</code></b> — выгрузить шаблон
+
+✮ Спам и теггер ✮
+<b><code>.avt + время + реплай</code></b> — спам в чат
+<b><code>.stop [chat_id]</code></b> — остановить спам
+<b><code>.tagger + айди + время + реплай</code></b> — теггер
+<b><code>.off [chat_id]</code></b> — остановить теггер
+<b><code>.clr + время + реплай</code></b> — календарь
+
+✮ Детект ✮
+<b><code>.detect [@username/id]</code></b> или реплай — начать слежение
+<b><code>.detectoff [@username/id]</code></b> или реплай — остановить
+<b><code>.detectlist</code></b> — список активных детектов
+
+✮ Постинг ✮
+<b><code>.poste 'ссылка' минуты</code></b> — пересылка поста
+<b><code>.poste_stop</code></b> — остановить все
+<b><code>.poste_list</code></b> — список активных рассылок
+<b><code>.pblk list/add/del/clear</code></b> — блок-лист
+
+✮ Системные ✮
+<b><code>.status</code></b> — статус работы функций
+<b><code>.zw</code></b> — остановить все функции
+
+✮ Медиа хранилище ✮
+<b><code>.med save [номер]</code></b> + реплай — сохранить медиа
+<b><code>.med list</code></b> — список медиа
+<b><code>.med send [номер]</code></b> — отправить медиа
+<b><code>.med del [номер]</code></b> — удалить медиа
+
+✮ Шаблоны фраз ✮
+<b><code>.shb list</code></b> — список шаблонов
+<b><code>.shb load [номер]</code></b> — загрузить шаблон
+
+⛧ Владелец: @misosphere
+"""
 
 # ==================== КЛАСС ЮЗЕРБОТА ====================
 class Userbot:
@@ -223,16 +310,25 @@ class Userbot:
         except:
             return str(entity.id)
 
+    # ========== ПОЛУЧЕНИЕ МЕДИА ИЗ ХРАНИЛИЩА ==========
+    async def get_media_from_storage(self, media_ref):
+        """Проверяет, есть ли media:XXX в строке и возвращает путь к файлу и очищенную строку"""
+        if not media_ref:
+            return None, media_ref
+        
+        import re
+        match = re.search(r'med:(\d+)', media_ref)
+        if match:
+            media_id = match.group(1)
+            media_path = get_media_path(media_id)
+            if media_path:
+                # Удаляем med:XXX из строки
+                clean_text = re.sub(r'med:\d+\s*', '', media_ref).strip()
+                return media_path, clean_text
+        return None, media_ref
+
     # ========== WATCHER ==========
     async def watcher(self, msg):
-        user_id = msg.sender_id
-        if user_id in autoreply_list:
-            if user_id not in last_reply_time or time.time() - last_reply_time[user_id] >= autoreply_time[user_id]:
-                last_reply_time[user_id] = time.time()
-                await asyncio.sleep(autoreply_time[user_id])
-                text = autoreply_shpk.get(user_id, '') + " " + choice(shablon) if autoreply_shpk.get(user_id) else choice(shablon)
-                await msg.reply(text, file=autoreply_photo.get(user_id), parse_mode='html')
-        
         # DETECT: если сообщение от отслеживаемого пользователя — сбрасываем таймер
         chat_id = msg.chat_id
         if chat_id in detect_list:
@@ -272,16 +368,29 @@ class Userbot:
         if not args: return await msg.edit("<b>аргументы не указаны</b>", parse_mode='html')
         reply = await msg.get_reply_message()
         chat_id = msg.chat_id
-        time_val = int(args.split()[0])
+        parts = args.split()
+        time_val = int(parts[0])
         if time_val < 3: return await msg.edit("<b>мин. задержка - 3</b>", parse_mode='html')
-        photo = args.split()[1] if len(args.split()) > 1 and 'https' in args.split()[1] else None
-        shapka_text = ' '.join(args.split()[2:]) if len(args.split()) > 2 else ''
+        
+        # Проверяем на медиа из хранилища
+        media_path = None
+        shapka_text = ''
+        for i, p in enumerate(parts[1:], 1):
+            if p.startswith('med:'):
+                media_path, _ = await self.get_media_from_storage(p)
+            else:
+                shapka_text = ' '.join(parts[1:])
+                break
+        
         spam_state[chat_id] = True
         await msg.edit(f'<b>включен\nвыкл: <code>.stop {chat_id}</code></b>', parse_mode='html')
         while chat_id in spam_state and spam_state[chat_id]:
             try:
-                if photo: await msg.respond(shapka_text + " " + choice(shablon), file=photo, reply_to=reply.id if reply else None)
-                else: await msg.respond(shapka_text + " " + choice(shablon), reply_to=reply.id if reply else None)
+                text = shapka_text + " " + choice(current_shablon) if shapka_text else choice(current_shablon)
+                if media_path:
+                    await msg.respond(text, file=media_path, reply_to=reply.id if reply else None)
+                else:
+                    await msg.respond(text, reply_to=reply.id if reply else None)
             except Exception as e:
                 if "TypeNotFoundError" in str(e) or "Constructor ID" in str(e):
                     pass
@@ -292,89 +401,64 @@ class Userbot:
             await asyncio.sleep(time_val)
         if chat_id in spam_state: del spam_state[chat_id]
 
-    # ========== АВТООТВЕТЧИК ==========
-    async def autoreply_handler(self, msg):
-        global autoreply_photo, autoreply_list, autoreply_time, autoreply_shpk
-        args = msg.text.split()
-        if not args: return
-        cmd = args[0]
-        if cmd == '.nrc':
-            if msg.is_reply:
-                user_id = (await msg.get_reply_message()).sender_id
-                autoreply_list.append(user_id)
-                autoreply_shpk[user_id] = ' '.join(args[1:])
-                autoreply_time[user_id] = 1
-                autoreply_photo[user_id] = None
-                await msg.edit(f'<b>включен на <code>{user_id}</code>\nвыкл: <code>.nrcc</code></b>', parse_mode='html')
-            else:
-                user_id = int(args[1])
-                autoreply_list.append(user_id)
-                autoreply_time[user_id] = int(args[2])
-                autoreply_photo[user_id] = args[3] if len(args) > 3 and 'https' in args[3] else None
-                autoreply_shpk[user_id] = ' '.join(args[4:]) if len(args) > 4 else ''
-                await msg.edit(f'<b>включен\nвыкл: <code>.nrcc {user_id}</code></b>', parse_mode='html')
-        elif cmd == '.nrcc':
-            if msg.is_reply: user_id = (await msg.get_reply_message()).sender_id
-            else: user_id = int(args[1]) if len(args) > 1 else 0
-            if user_id in autoreply_list:
-                autoreply_list.remove(user_id)
-                autoreply_time.pop(user_id, None)
-                autoreply_photo.pop(user_id, None)
-                autoreply_shpk.pop(user_id, None)
-                await msg.edit(f'<b>выключен на <code>{user_id}</code></b>', parse_mode='html')
-
     # ========== КАЛЕНДАРЬ ==========
     async def kalendar_handler(self, msg):
         args = await self.get_args(msg)
         if not args: return await msg.edit("<b>аргументы: время медиа шапка</b>", parse_mode='html')
         parts = args.split()
         time_val = int(parts[0])
-        photo = parts[1] if len(parts) > 1 and 'https' in parts[1] else None
-        shapka_text = ' '.join(parts[2:]) if len(parts) > 2 else ''
-        await msg.edit(f"{shapka_text} {choice(shablon)}", parse_mode='html')
+        
+        # Проверяем на медиа из хранилища
+        media_path = None
+        shapka_text = ''
+        for i, p in enumerate(parts[1:], 1):
+            if p.startswith('med:'):
+                media_path, _ = await self.get_media_from_storage(p)
+            else:
+                shapka_text = ' '.join(parts[1:])
+                break
+        
+        await msg.edit(f"{shapka_text} {choice(current_shablon)}", parse_mode='html')
         for i in range(100):
             schedule_date = datetime.now() + timedelta(minutes=time_val)
-            await msg.respond(f"{shapka_text} {choice(shablon)}", file=photo, schedule=schedule_date.timestamp())
+            text = shapka_text + " " + choice(current_shablon) if shapka_text else choice(current_shablon)
+            if media_path:
+                await msg.respond(text, file=media_path, schedule=schedule_date.timestamp())
+            else:
+                await msg.respond(text, schedule=schedule_date.timestamp())
             await asyncio.sleep(0)
-
-    # ========== ИЗМЕНЕНИЕ АРГУМЕНТОВ АВТООТВЕТЧИКА ==========
-    async def rchange_handler(self, msg):
-        global autoreply_photo, autoreply_time, autoreply_shpk
-        args = msg.text.split()
-        if len(args) < 4: return
-        action = args[1]
-        user_id = int(args[2])
-        value = ' '.join(args[3:])
-        if action == 'shapka':
-            autoreply_shpk[user_id] = value
-            await msg.edit(f'<b>шапка для {user_id} изменена</b>', parse_mode='html')
-        elif action == 'media':
-            autoreply_photo[user_id] = value if 'https' in value else None
-            await msg.edit(f'<b>медиа для {user_id} изменено</b>', parse_mode='html')
-        elif action == 'time':
-            autoreply_time[user_id] = int(value)
-            await msg.edit(f'<b>задержка для {user_id}: {autoreply_time[user_id]} сек</b>', parse_mode='html')
 
     # ========== ТЕГГЕР ==========
     async def tagger_handler(self, msg):
         args = msg.text.split(maxsplit=1)
-        if len(args) < 2: return await msg.edit("<b>аргументы: user_id время [медиа] [текст]</b>", parse_mode='html')
+        if len(args) < 2: return await msg.edit("<b>аргументы: user_id время [med:номер] [текст]</b>", parse_mode='html')
         parts = args[1].split()
         if len(parts) < 2: return
         user_id = int(parts[0])
         time_val = int(parts[1])
         if time_val < 3: return await msg.edit("<b>мин. задержка - 3</b>", parse_mode='html')
-        photo = parts[2] if len(parts) > 2 and 'https' in parts[2] else None
-        caption = ' '.join(parts[3:]) if len(parts) > 3 else ''
+        
+        # Проверяем на медиа из хранилища
+        media_path = None
+        caption = ''
+        for p in parts[2:]:
+            if p.startswith('med:'):
+                media_path, _ = await self.get_media_from_storage(p)
+            else:
+                caption = ' '.join(parts[2:])
+                break
+        
         reply_to_msg = await msg.get_reply_message()
         chat_id = reply_to_msg.chat_id if reply_to_msg else msg.chat_id
         tagger_chats[chat_id] = True
         await msg.edit(f'<b>включен\nвыкл: <code>.off {chat_id}</code></b>', parse_mode='html')
         while chat_id in tagger_chats:
-            text = f"{caption} <a href='tg://user?id={user_id}'>{choice(shablon)}</a>"
+            text = f"{caption} <a href='tg://user?id={user_id}'>{choice(current_shablon)}</a>"
             try:
-                if photo: await self.client.send_file(chat_id, photo, caption=text, parse_mode='html')
-                else: await self.client.send_message(chat_id, text, parse_mode='html')
+                if media_path:
+                    await self.client.send_file(chat_id, media_path, caption=text, parse_mode='html')
+                else:
+                    await self.client.send_message(chat_id, text, parse_mode='html')
             except Exception as e:
                 if "TypeNotFoundError" in str(e) or "Constructor ID" in str(e):
                     pass
@@ -455,37 +539,52 @@ class Userbot:
             result = f"<b>результат:</b>\nслов: {total_words}\nсимволов: {total_chars}\nстрок: {total_lines}"
             await msg.edit(result, parse_mode='html')
 
-    # ========== ЗАГРУЗКА ШАБЛОНА ==========
+    # ========== ЗАГРУЗКА ШАБЛОНА (старая команда) ==========
     async def load_handler(self, msg):
+        global current_shablon
         if msg.is_reply:
             reply_msg = await msg.get_reply_message()
             if reply_msg.file:
                 file = await reply_msg.download_media()
                 with open(file, 'r', encoding='utf-8') as f:
-                    shablon.clear()
-                    shablon.extend([line.strip() for line in f.readlines()])
+                    current_shablon.clear()
+                    current_shablon.extend([line.strip() for line in f.readlines() if line.strip()])
                 os.remove(file)
                 await msg.edit("Успешно!")
 
     # ========== ВЫГРУЗКА ШАБЛОНА ==========
     async def file_handler(self, msg):
         with open('texts.txt', 'w', encoding='utf-8') as f:
-            f.write('\n'.join(shablon))
+            f.write('\n'.join(current_shablon))
         await self.client.send_file(msg.chat_id, 'texts.txt')
         os.remove('texts.txt')
         await msg.delete()
 
-    # ========== PING + UPTIME ==========
+    # ========== PING + UPTIME + СТАТИСТИКА ==========
     async def ping_handler(self, msg):
+        global ping_history
+        
         bot_runtime = int(time.time() - start_time)
         uptime_str = str(timedelta(seconds=bot_runtime))
         
+        # Правильный расчёт пинга
         start_ping = time.time()
         await msg.edit("<b>измеряю пинг...</b>", parse_mode='html')
         end_ping = time.time()
         ping_ms = round((end_ping - start_ping) * 1000, 2)
         
-        await msg.edit(f'<b>аптайм: <code>{uptime_str}</code>\nпинг: <code>{ping_ms} ms</code></b>', parse_mode='html')
+        # Добавляем в историю
+        ping_history.append(ping_ms)
+        if len(ping_history) > 10:  # храним последние 10 замеров
+            ping_history.pop(0)
+        
+        # Считаем статистику
+        avg_ping = round(sum(ping_history) / len(ping_history), 2) if ping_history else ping_ms
+        min_ping = min(ping_history) if ping_history else ping_ms
+        max_ping = max(ping_history) if ping_history else ping_ms
+        
+        result = f"⛧ Аптайм: {uptime_str}\n⛧ Пинг: {ping_ms} ms\n⛧ Средний: {avg_ping} ms (посл. {len(ping_history)})\n⛧ Мин / Макс: {min_ping} ms / {max_ping} ms"
+        await msg.edit(result, parse_mode='html')
 
     # ========== ОСТАНОВКА СПАМА ==========
     async def stop_handler(self, msg):
@@ -525,22 +624,16 @@ class Userbot:
             await msg.edit("<b>минимальное время - 1 минута</b>", parse_mode='html')
             return
         
-        # Сохраняем цель
         self.target_user = target_input.strip().replace('@', '')
-        target_display = target_input  # сохраняем как ввели
-        
-        # Сохраняем чат для уведомления
+        target_display = target_input
         self.target_chat_id_for_timer = msg.chat_id
         
-        # Отменяем старый таймер если был
         if self._target_timer_task and not self._target_timer_task.done():
             self._target_timer_task.cancel()
         
-        # Запускаем новый таймер
         async def disable_target():
             await asyncio.sleep(minutes * 60)
             if self.target_user:
-                # Определяем как показывать цель
                 display = target_display
                 await self.client.send_message(
                     self.target_chat_id_for_timer,
@@ -550,7 +643,6 @@ class Userbot:
                 self.target_chat_id_for_timer = None
         
         self._target_timer_task = asyncio.create_task(disable_target())
-        
         await msg.edit(f"Цель: {target_input} установлена. Автоотключение через {minutes} минут", parse_mode='html')
 
     async def tgoff_handler(self, msg):
@@ -560,6 +652,127 @@ class Userbot:
         self.target_chat_id_for_timer = None
         await msg.edit("<b>Цель отключена</b>", parse_mode='html')
 
+    # ========== SHABLON КОМАНДЫ ==========
+    async def shb_handler(self, msg):
+        args = await self.get_args(msg)
+        if not args:
+            await msg.edit("<b>использование: .shb list | .shb load [номер]</b>", parse_mode='html')
+            return
+        
+        parts = args.split()
+        cmd = parts[0].lower()
+        
+        if cmd == 'list':
+            # Показываем список доступных шаблонов
+            template_files = glob.glob(os.path.join(TEMPLATES_DIR, "*.txt"))
+            result = "⛧ Доступные шаблоны:\n\n"
+            for tf in template_files:
+                name = os.path.basename(tf).replace('.txt', '')
+                with open(tf, 'r', encoding='utf-8') as f:
+                    count = len([line for line in f.readlines() if line.strip()])
+                active = "✅ активен" if name == current_template_name else ""
+                result += f"<b><code>{name}</code></b> — {count} фраз {active}\n"
+            await msg.edit(result, parse_mode='html')
+        
+        elif cmd == 'load':
+            if len(parts) < 2:
+                await msg.edit("<b>укажи номер шаблона\nпример: .shb load 1</b>", parse_mode='html')
+                return
+            template_name = parts[1]
+            if load_template(template_name):
+                await msg.edit(f"⛧ Шаблон <b><code>{template_name}</code></b> загружен. {len(current_shablon)} фраз добавлено.", parse_mode='html')
+            else:
+                await msg.edit(f"⛧ Шаблон <b><code>{template_name}</code></b> не найден.", parse_mode='html')
+        else:
+            await msg.edit("<b>неизвестная команда. используй: list или load</b>", parse_mode='html')
+
+    # ========== MEDIA КОМАНДЫ ==========
+    async def med_handler(self, msg):
+        args = await self.get_args(msg)
+        if not args:
+            await msg.edit("<b>использование:\n.med save [номер] + реплай\n.med list\n.med send [номер]\n.med del [номер]</b>", parse_mode='html')
+            return
+        
+        parts = args.split()
+        cmd = parts[0].lower()
+        
+        if cmd == 'save':
+            if len(parts) < 2:
+                await msg.edit("<b>укажи номер для сохранения\nпример: .med save 1 + реплай на медиа</b>", parse_mode='html')
+                return
+            if not msg.is_reply:
+                await msg.edit("<b>нужен реплай на медиа</b>", parse_mode='html')
+                return
+            
+            media_id = parts[1]
+            reply_msg = await msg.get_reply_message()
+            if not reply_msg.media:
+                await msg.edit("<b>в ответе нет медиа</b>", parse_mode='html')
+                return
+            
+            try:
+                # Определяем расширение
+                ext = None
+                if reply_msg.photo:
+                    ext = 'jpg'
+                elif reply_msg.video:
+                    ext = 'mp4'
+                elif reply_msg.document:
+                    mime = reply_msg.document.mime_type
+                    if 'video' in mime:
+                        ext = 'mp4'
+                    elif 'image' in mime:
+                        ext = 'jpg'
+                    else:
+                        ext = 'bin'
+                elif reply_msg.gif:
+                    ext = 'gif'
+                else:
+                    ext = 'bin'
+                
+                file_data = await reply_msg.download_media(bytes)
+                save_media(media_id, file_data, ext)
+                await msg.edit(f"⛧ Медиа сохранено как <b><code>{media_id}</code></b> (тип: {ext})", parse_mode='html')
+            except Exception as e:
+                await msg.edit(f"<b>ошибка: {e}</b>", parse_mode='html')
+        
+        elif cmd == 'list':
+            media_list = get_all_media()
+            if not media_list:
+                await msg.edit("<b>нет сохранённых медиа</b>", parse_mode='html')
+                return
+            result = "⛧ Сохранённые медиа:\n\n"
+            for name, ext, size in media_list:
+                size_kb = round(size / 1024, 1)
+                result += f"<b><code>{name}</code></b> — {ext} ({size_kb} KB)\n"
+            result += f"\n<b><code>.med send [номер]</code></b> — отправить\n<b><code>.med del [номер]</code></b> — удалить"
+            await msg.edit(result, parse_mode='html')
+        
+        elif cmd == 'send':
+            if len(parts) < 2:
+                await msg.edit("<b>укажи номер медиа\nпример: .med send 1</b>", parse_mode='html')
+                return
+            media_id = parts[1]
+            media_path = get_media_path(media_id)
+            if media_path:
+                await self.client.send_file(msg.chat_id, media_path)
+                await msg.delete()
+            else:
+                await msg.edit(f"<b>медиа {media_id} не найдено</b>", parse_mode='html')
+        
+        elif cmd == 'del':
+            if len(parts) < 2:
+                await msg.edit("<b>укажи номер медиа для удаления\nпример: .med del 1</b>", parse_mode='html')
+                return
+            media_id = parts[1]
+            if delete_media(media_id):
+                await msg.edit(f"⛧ Медиа <b><code>{media_id}</code></b> удалено", parse_mode='html')
+            else:
+                await msg.edit(f"<b>медиа {media_id} не найдено</b>", parse_mode='html')
+        
+        else:
+            await msg.edit("<b>неизвестная команда. используй: save, list, send, del</b>", parse_mode='html')
+
     # ========== HELP ==========
     async def help_handler(self, msg):
         global mh, name
@@ -567,7 +780,7 @@ class Userbot:
         if len(msg.text.split()) > 1:
             mh = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
             return await msg.edit("<b>медиа для .help установлено</b>", parse_mode='html')
-        caption = menutext.format(name, msg.chat_id, me.id, me.first_name, me.username)
+        caption = menutext.format(name)
         if mh:
             try:
                 await self.client.send_file(msg.chat_id, mh, caption=caption, parse_mode='html')
@@ -587,6 +800,51 @@ class Userbot:
                 await msg.delete()
             except: await msg.edit(menu, parse_mode='html')
         else: await msg.edit(menu, parse_mode='html')
+
+    # ========== MORE ==========
+    async def more_handler(self, msg):
+        if mm:
+            try:
+                await self.client.send_file(msg.chat_id, mm, caption=more_text, parse_mode='html')
+                await msg.delete()
+            except: await msg.edit(more_text, parse_mode='html')
+        else: await msg.edit(more_text, parse_mode='html')
+
+    # ========== CUSTOM ==========
+    async def custom_handler(self, msg):
+        if mm:
+            try:
+                await self.client.send_file(msg.chat_id, mm, caption=custom_text, parse_mode='html')
+                await msg.delete()
+            except: await msg.edit(custom_text, parse_mode='html')
+        else: await msg.edit(custom_text, parse_mode='html')
+
+    # ========== RASSET ==========
+    async def rasset_handler(self, msg):
+        if mm:
+            try:
+                await self.client.send_file(msg.chat_id, mm, caption=rasset_text, parse_mode='html')
+                await msg.delete()
+            except: await msg.edit(rasset_text, parse_mode='html')
+        else: await msg.edit(rasset_text, parse_mode='html')
+
+    # ========== TIMES ==========
+    async def times_handler(self, msg):
+        if mm:
+            try:
+                await self.client.send_file(msg.chat_id, mm, caption=times_text, parse_mode='html')
+                await msg.delete()
+            except: await msg.edit(times_text, parse_mode='html')
+        else: await msg.edit(times_text, parse_mode='html')
+
+    # ========== FILES ==========
+    async def files_handler(self, msg):
+        if mm:
+            try:
+                await self.client.send_file(msg.chat_id, mm, caption=files_text, parse_mode='html')
+                await msg.delete()
+            except: await msg.edit(files_text, parse_mode='html')
+        else: await msg.edit(files_text, parse_mode='html')
 
     # ========== CMD ==========
     async def cmd_handler(self, msg):
@@ -650,7 +908,7 @@ class Userbot:
             name = args
             await msg.edit(f'<b>имя бота изменено: {name}</b>', parse_mode='html')
 
-    # ========== POST COMMANDS ==========
+    # ========== POST COMMANDS (исправленный - пересылает все медиа) ==========
     async def poste_handler(self, msg):
         global poste_list, poste_blocklist
         args = await self.get_args(msg)
@@ -692,9 +950,19 @@ class Userbot:
         except Exception as e:
             return await msg.edit(f"<b>не удалось найти канал/чат {chat_username}. ошибка: {e}</b>", parse_mode='html')
         
+        # Получаем сообщение и все связанные с ним (медиагруппа)
         try:
-            message = await self.client.get_messages(entity, ids=msg_id)
-            if message is None:
+            # Получаем сообщения вокруг указанного ID (для групп)
+            messages = []
+            async for m in self.client.iter_messages(entity, offset_id=msg_id, reverse=True, limit=10):
+                if m.id == msg_id:
+                    messages.append(m)
+                elif m.grouped_id and m.grouped_id == getattr(await self.client.get_messages(entity, ids=msg_id), 'grouped_id', None):
+                    messages.append(m)
+                else:
+                    break
+            
+            if not messages:
                 return await msg.edit(f"<b>не удалось найти сообщение {msg_id} в {chat_username}</b>", parse_mode='html')
         except Exception as e:
             return await msg.edit(f"<b>ошибка при получении сообщения: {e}</b>", parse_mode='html')
@@ -719,7 +987,7 @@ class Userbot:
             'interval': interval,
             'running': True,
             'entity': entity,
-            'msg_id': msg_id
+            'message_ids': [m.id for m in messages]
         }
         
         await msg.edit(f"<b>рассылка запущена\nссылка: {link}\nинтервал: {interval} мин\nчатов: {len(target_chats)}\nостановить: .poste_stop {link}</b>", parse_mode='html')
@@ -733,12 +1001,13 @@ class Userbot:
                 if not poste_list.get(link, {}).get('running', False):
                     break
                 try:
-                    await self.client.forward_messages(chat_id, messages=data['msg_id'], from_peer=data['entity'])
+                    # Пересылаем все сообщения из группы
+                    await self.client.forward_messages(chat_id, messages=data['message_ids'], from_peer=data['entity'])
                     await asyncio.sleep(2)
                 except FloodWaitError as e:
                     await asyncio.sleep(e.seconds)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Ошибка пересылки: {e}")
             await asyncio.sleep(data['interval'] * 60)
 
     async def poste_stop_handler(self, msg):
@@ -843,11 +1112,11 @@ class Userbot:
 
 спам (avt): {len(spam_state)} активных
 теггер (tagger): {len(tagger_chats)} активных
-автоответчик: {len(autoreply_list)} пользователей
 рассылки (poste): {len(poste_list)} активных
 блок-лист (pblk): {len(poste_blocklist)} чатов
 цель (target): {target_info}
 детекты: {sum(len(v) for v in detect_list.values())} активных
+активный шаблон: {current_template_name} ({len(current_shablon)} фраз)
 
 --- аккаунт ---
 имя: {me.first_name}
@@ -979,11 +1248,10 @@ class Userbot:
 
     # ========== ОСТАНОВИТЬ ВСЕ ФУНКЦИИ ==========
     async def zw_handler(self, msg):
-        global spam_state, tagger_chats, autoreply_list, poste_list, detect_list
+        global spam_state, tagger_chats, poste_list, detect_list
         
         spam_state.clear()
         tagger_chats.clear()
-        autoreply_list.clear()
         
         for link in list(poste_list.keys()):
             poste_list[link]['running'] = False
@@ -996,7 +1264,6 @@ class Userbot:
                     task.cancel()
         detect_list.clear()
         
-        # Отключаем target и отменяем таймер
         if self._target_timer_task and not self._target_timer_task.done():
             self._target_timer_task.cancel()
         self.target_user = None
@@ -1027,8 +1294,6 @@ class Userbot:
             
             if text.startswith('.avt'): await self.renewal_handler(msg)
             elif text.startswith('.clr'): await self.kalendar_handler(msg)
-            elif text.startswith('.nrc') or text.startswith('.nrcc') or text.startswith('.setshpk'): await self.autoreply_handler(msg)
-            elif text.startswith('.rchange'): await self.rchange_handler(msg)
             elif text.startswith('.tagger'): await self.tagger_handler(msg)
             elif text.startswith('.stop'): await self.stop_handler(msg)
             elif text.startswith('.off'): await self.off_handler(msg)
@@ -1039,8 +1304,15 @@ class Userbot:
             elif text.startswith('.ping'): await self.ping_handler(msg)
             elif text.startswith('.target'): await self.target_handler(msg)
             elif text.startswith('.tgoff'): await self.tgoff_handler(msg)
+            elif text.startswith('.shb'): await self.shb_handler(msg)
+            elif text.startswith('.med'): await self.med_handler(msg)
             elif text.startswith('.help'): await self.help_handler(msg)
             elif text.startswith('.menu'): await self.menu_handler(msg)
+            elif text.startswith('.more'): await self.more_handler(msg)
+            elif text.startswith('.custom'): await self.custom_handler(msg)
+            elif text.startswith('.rasset'): await self.rasset_handler(msg)
+            elif text.startswith('.times'): await self.times_handler(msg)
+            elif text.startswith('.files'): await self.files_handler(msg)
             elif text.startswith('.cmd'): await self.cmd_handler(msg)
             elif text.startswith('.x0'): await self.x0_handler(msg)
             elif text.startswith('.name'): await self.name_handler(msg)
