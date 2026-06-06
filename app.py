@@ -10,7 +10,6 @@ from random import choice
 from datetime import datetime, timedelta
 
 import requests
-import g4f
 
 from flask import Flask
 from telethon import TelegramClient, events
@@ -43,7 +42,7 @@ API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
 TEMPLATES_DIR = "templates"
 MEDIA_DIR = "media"
 LOG_CHAT_FILE = "log_chat.txt"
-GPT_CHATS_FILE = "gpt_chats.txt"
+TRACK_FILE = "track_list.txt"
 
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 os.makedirs(MEDIA_DIR, exist_ok=True)
@@ -102,35 +101,25 @@ load_log_chat()
 # ========== АКТИВНЫЕ ПОИСКИ .DETECT ==========
 active_searches = {}
 
-# ========== РЕЖИМ НЕЙРОСЕТИ (GPT) ==========
-gpt_enabled_chats = set()
+# ========== СЛЕЖЕНИЕ .TRACK ==========
+track_list = {}  # {chat_id: {user_id: {'task': task, 'name': name, 'username': username}}}
 
-def load_gpt_chats():
-    global gpt_enabled_chats
-    if os.path.exists(GPT_CHATS_FILE):
+def load_track_list():
+    global track_list
+    if os.path.exists(TRACK_FILE):
         try:
-            with open(GPT_CHATS_FILE, 'r') as f:
-                for line in f:
-                    chat_id = line.strip()
-                    if chat_id:
-                        gpt_enabled_chats.add(int(chat_id))
+            with open(TRACK_FILE, 'r') as f:
+                import json
+                track_list = json.load(f)
         except:
             pass
 
-def save_gpt_chat(chat_id):
-    with open(GPT_CHATS_FILE, 'a') as f:
-        f.write(f"{chat_id}\n")
+def save_track_list():
+    with open(TRACK_FILE, 'w') as f:
+        import json
+        json.dump(track_list, f)
 
-def remove_gpt_chat(chat_id):
-    if os.path.exists(GPT_CHATS_FILE):
-        with open(GPT_CHATS_FILE, 'r') as f:
-            lines = f.readlines()
-        with open(GPT_CHATS_FILE, 'w') as f:
-            for line in lines:
-                if line.strip() != str(chat_id):
-                    f.write(line)
-
-load_gpt_chats()
+load_track_list()
 
 # ========== ТЕКУЩИЙ ШАБЛОН ==========
 current_shablon = []
@@ -253,8 +242,9 @@ more_text = """
 <b><code>.detect [текст]</code></b> — поиск фразы во всех чатах
 <b><code>.detectoff [номер]</code></b> — остановить поиск
 <b><code>.detectlist</code></b> — список активных поисков
-<b><code>.gpt + реплай</code></b> — включить режим нейросети в чате
-<b><code>.gptoff</code></b> — выключить режим нейросети
+<b><code>.track [@username/id]</code></b> или реплай — слежение за пользователем
+<b><code>.trackoff [@username/id]</code></b> или реплай — остановить слежение
+<b><code>.tracklist</code></b> — список активных слежений
 """
 
 custom_text = """
@@ -328,6 +318,11 @@ commands_text = """
 <b><code>.detectoff [номер]</code></b> — остановить поиск
 <b><code>.detectlist</code></b> — список активных поисков
 
+✮ Слежение за пользователями ✮
+<b><code>.track [@username/id]</code></b> или реплай — слежение (1 час)
+<b><code>.trackoff [@username/id]</code></b> или реплай — остановить
+<b><code>.tracklist</code></b> — список активных слежений
+
 ✮ Постинг ✮
 <b><code>.poste 'ссылка' минуты</code></b> — пересылка поста
 <b><code>.poste_stop</code></b> — остановить все
@@ -350,10 +345,6 @@ commands_text = """
 <b><code>.shb load [название]</code></b> — загрузить шаблон
 <b><code>.shb save</code></b> + реплай на TXT — сохранить шаблон
 <b><code>.shb del [название]</code></b> — удалить шаблон
-
-✮ Нейросеть ✮
-<b><code>.gpt + реплай</code></b> — включить режим нейросети в чате
-<b><code>.gptoff</code></b> — выключить режим нейросети
 
 ⛧ Владелец: @misosphere
 """
@@ -471,7 +462,6 @@ class Userbot:
             try:
                 response = requests.get(media_url, timeout=30)
                 if response.status_code == 200:
-                    # Сохраняем во временный файл
                     temp_file = f"temp_media_{int(time.time())}"
                     ext = media_url.split('.')[-1].split('?')[0]
                     if len(ext) > 5:
@@ -530,7 +520,6 @@ class Userbot:
         if chat_id in spam_state:
             del spam_state[chat_id]
         
-        # Удаляем временный файл
         if media_url and media_path and os.path.exists(media_path):
             try:
                 os.remove(media_path)
@@ -602,7 +591,6 @@ class Userbot:
             if chat_id in self.active_calendars:
                 del self.active_calendars[chat_id]
             
-            # Удаляем временный файл
             if media_url and media_path and os.path.exists(media_path):
                 try:
                     os.remove(media_path)
@@ -673,7 +661,6 @@ class Userbot:
         if chat_id in tagger_chats:
             del tagger_chats[chat_id]
         
-        # Удаляем временный файл
         if media_url and media_path and os.path.exists(media_path):
             try:
                 os.remove(media_path)
@@ -1163,60 +1150,151 @@ class Userbot:
         else:
             await msg.edit("<b>⛧ Ошибка установки лог-чата ⛧</b>\n\n<b>Причина:</b> Не удалось найти чат. Убедитесь, что ваш аккаунт является участником этого чата, и попробуйте снова.", parse_mode='html')
 
-    # ========== НЕЙРОСЕТЬ (GPT) ==========
-    async def gpt_handler(self, msg):
-        global gpt_enabled_chats
+    # ========== СЛЕЖЕНИЕ .TRACK ==========
+    async def track_handler(self, msg):
+        global track_list
         
-        # Проверяем, есть ли реплай (для включения)
+        target_user = None
+        
+        # Если реплай на сообщение
         if msg.is_reply:
-            chat_id = msg.chat_id
-            if chat_id not in gpt_enabled_chats:
-                gpt_enabled_chats.add(chat_id)
-                save_gpt_chat(chat_id)
-                await msg.edit("<b>⛧ Режим нейросети включён ⛧</b>\n\nТеперь бот будет отвечать на все сообщения в этом чате через нейросеть.\n\n<b>Выключить:</b> .gptoff", parse_mode='html')
-            else:
-                await msg.edit("<b>Режим нейросети уже включён в этом чате</b>", parse_mode='html')
+            reply_msg = await msg.get_reply_message()
+            target_user = await reply_msg.get_sender()
+            if not target_user:
+                await msg.edit("<b>Не удалось определить пользователя по реплаю</b>", parse_mode='html')
+                return
+            user_id = target_user.id
+            user_name = await self.get_entity_name(target_user)
+            username = f"@{target_user.username}" if target_user.username else ""
         else:
-            await msg.edit("<b>Сделай реплай на любое сообщение, чтобы включить режим нейросети\nПример: .gpt + реплай</b>", parse_mode='html')
-
-    async def gptoff_handler(self, msg):
-        global gpt_enabled_chats
-        chat_id = msg.chat_id
-        if chat_id in gpt_enabled_chats:
-            gpt_enabled_chats.discard(chat_id)
-            remove_gpt_chat(chat_id)
-            await msg.edit("<b>⛧ Режим нейросети выключен ⛧</b>", parse_mode='html')
-        else:
-            await msg.edit("<b>Режим нейросети не был включён в этом чате</b>", parse_mode='html')
-
-    async def gpt_respond(self, msg):
-        """Отвечает на сообщение через нейросеть"""
-        chat_id = msg.chat_id
-        if chat_id not in gpt_enabled_chats:
-            return
-        
-        user_text = msg.text
-        if not user_text or user_text.startswith('.'):
-            return
-        
-        # Показываем, что бот печатает
-        async with self.client.action(chat_id, 'typing'):
+            args = await self.get_args(msg)
+            if not args:
+                await msg.edit("<b>использование: .track @username или .track + реплай на сообщение</b>", parse_mode='html')
+                return
             try:
-                # Генерируем ответ через g4f
-                response = g4f.ChatCompletion.create(
-                    model=g4f.models.gpt_4o_mini,
-                    messages=[{"role": "user", "content": user_text}]
-                )
-                if response and len(response) > 0:
-                    # Обрезаем слишком длинные ответы
-                    if len(response) > 4000:
-                        response = response[:4000] + "..."
-                    await msg.reply(response, parse_mode='html')
-                else:
-                    await msg.reply("<b>Не удалось получить ответ от нейросети</b>", parse_mode='html')
+                target_user = await self.client.get_entity(args.strip())
+                user_id = target_user.id
+                user_name = await self.get_entity_name(target_user)
+                username = f"@{target_user.username}" if target_user.username else ""
             except Exception as e:
-                print(f"GPT ошибка: {e}")
-                await msg.reply(f"<b>Ошибка нейросети: {e}</b>", parse_mode='html')
+                await msg.edit(f"<b>Не удалось найти пользователя: {e}</b>", parse_mode='html')
+                return
+        
+        chat_id = msg.chat_id
+        chat_entity = await msg.get_chat()
+        chat_name = await self.get_entity_name(chat_entity)
+        
+        # Если уже есть слежение за этим пользователем в этом чате — отменяем старую задачу
+        if chat_id in track_list and str(user_id) in track_list[chat_id]:
+            old_task = track_list[chat_id][str(user_id)].get('task')
+            if old_task and not old_task.done():
+                old_task.cancel()
+        
+        # Создаём задачу слежения
+        async def track_wait_and_notify():
+            await asyncio.sleep(3600)  # 1 час
+            try:
+                saved_messages = await self.client.get_entity('me')
+                await self.client.send_message(
+                    saved_messages,
+                    f"<b>⛧ Слежение ⛧</b>\n\n"
+                    f"<b>Пользователь:</b> {user_name} {username}\n"
+                    f"<b>Чат:</b> {chat_name}\n"
+                    f"<b>Статус:</b> не писал 1 час",
+                    parse_mode='html'
+                )
+            except Exception as e:
+                print(f"Ошибка отправки уведомления о слежении: {e}")
+            
+            # Удаляем задачу из списка после завершения
+            if chat_id in track_list and str(user_id) in track_list[chat_id]:
+                del track_list[chat_id][str(user_id)]
+                if not track_list[chat_id]:
+                    del track_list[chat_id]
+                save_track_list()
+        
+        task = asyncio.create_task(track_wait_and_notify())
+        
+        # Сохраняем в словарь
+        if chat_id not in track_list:
+            track_list[chat_id] = {}
+        track_list[chat_id][str(user_id)] = {
+            'task': task,
+            'name': user_name,
+            'username': username,
+            'chat_name': chat_name
+        }
+        save_track_list()
+        
+        await msg.edit(
+            f"<b>⛧ Слежение установлено ⛧</b>\n\n"
+            f"<b>Пользователь:</b> {user_name} {username}\n"
+            f"<b>Чат:</b> {chat_name}\n"
+            f"<b>Условие:</b> если не напишет 1 час — уведомлю в избранное",
+            parse_mode='html'
+        )
+
+    async def trackoff_handler(self, msg):
+        global track_list
+        
+        target_user = None
+        target_id = None
+        
+        # Если реплай на сообщение
+        if msg.is_reply:
+            reply_msg = await msg.get_reply_message()
+            target_user = await reply_msg.get_sender()
+            if target_user:
+                target_id = str(target_user.id)
+        else:
+            args = await self.get_args(msg)
+            if args:
+                try:
+                    # Пробуем получить пользователя
+                    entity = await self.client.get_entity(args.strip())
+                    target_id = str(entity.id)
+                except Exception as e:
+                    await msg.edit(f"<b>Не удалось найти пользователя: {e}</b>", parse_mode='html')
+                    return
+        
+        if not target_id:
+            await msg.edit("<b>использование: .trackoff @username или .trackoff + реплай на сообщение</b>", parse_mode='html')
+            return
+        
+        chat_id = msg.chat_id
+        if chat_id in track_list and target_id in track_list[chat_id]:
+            # Отменяем задачу
+            old_task = track_list[chat_id][target_id].get('task')
+            if old_task and not old_task.done():
+                old_task.cancel()
+            user_name = track_list[chat_id][target_id].get('name', target_id)
+            del track_list[chat_id][target_id]
+            if not track_list[chat_id]:
+                del track_list[chat_id]
+            save_track_list()
+            await msg.edit(f"<b>⛧ Слежение отключено для пользователя {user_name}</b>", parse_mode='html')
+        else:
+            await msg.edit("<b>⛧ Слежение на этого пользователя не найдено</b>", parse_mode='html')
+
+    async def tracklist_handler(self, msg):
+        if not track_list:
+            await msg.edit("<b>⛧ Нет активных слежений</b>", parse_mode='html')
+            return
+        
+        result = "<b>⛧ Активные слежения ⛧</b>\n\n"
+        for chat_id, users in track_list.items():
+            try:
+                chat_entity = await self.client.get_entity(int(chat_id))
+                chat_name = await self.get_entity_name(chat_entity)
+            except:
+                chat_name = str(chat_id)
+            result += f"<b>Чат:</b> {chat_name}\n"
+            for user_id, data in users.items():
+                result += f"  • {data['name']} {data['username']} (ID: {user_id})\n"
+            result += "\n"
+        
+        result += "<b>Остановить:</b> .trackoff @username или реплай"
+        await msg.edit(result, parse_mode='html')
 
     # ========== DETECT (ПОИСК ПО ВСЕМ ЧАТАМ) ==========
     async def detect_handler(self, msg):
@@ -1493,7 +1571,7 @@ class Userbot:
                 except:
                     pass
 
-    # ========== POST COMMANDS (С ОТЧЁТОМ) ==========
+    # ========== POST COMMANDS ==========
     async def poste_handler(self, msg):
         global poste_list, poste_blocklist
         args = await self.get_args(msg)
@@ -1734,8 +1812,8 @@ class Userbot:
 <b>блок-лист (pblk):</b> {len(poste_blocklist)} чатов
 <b>цель (target):</b> {target_info}
 <b>активные поиски (detect):</b> {len(active_searches)}
+<b>активные слежения (track):</b> {sum(len(v) for v in track_list.values())}
 <b>активный шаблон:</b> {current_template_name} ({len(current_shablon)} фраз)
-<b>нейросеть включена в чатах:</b> {len(gpt_enabled_chats)}
 
 --- аккаунт ---
 <b>имя:</b> {me.first_name}
@@ -1755,6 +1833,7 @@ class Userbot:
             poste_list[link]['running'] = False
         poste_list.clear()
         
+        # Останавливаем активные поиски detect
         for sid in list(active_searches.keys()):
             if active_searches[sid].get('active', False):
                 active_searches[sid]['active'] = False
@@ -1762,9 +1841,19 @@ class Userbot:
                     active_searches[sid]['task'].cancel()
             del active_searches[sid]
         
+        # Останавливаем календари
         for chat_id, task in list(self.active_calendars.items()):
             task.cancel()
         self.active_calendars.clear()
+        
+        # Останавливаем слежение track
+        for chat_id, users in list(track_list.items()):
+            for user_id, data in list(users.items()):
+                task = data.get('task')
+                if task and not task.done():
+                    task.cancel()
+        track_list.clear()
+        save_track_list()
         
         if self._target_timer_task and not self._target_timer_task.done():
             self._target_timer_task.cancel()
@@ -1800,11 +1889,46 @@ class Userbot:
             msg = event.message
             text = msg.text or ""
             
-            # Входящие сообщения (от других) — обрабатываем нейросеть и детект
+            # Входящие сообщения (от других) — обрабатываем слежение track
             if not msg.out:
-                # Режим нейросети
-                if msg.chat_id in gpt_enabled_chats:
-                    await self.gpt_respond(msg)
+                # Обработка слежения: если сообщение от отслеживаемого пользователя — сбрасываем таймер
+                chat_id = msg.chat_id
+                if chat_id in track_list:
+                    user_id = msg.sender_id
+                    if str(user_id) in track_list[chat_id]:
+                        old_task = track_list[chat_id][str(user_id)].get('task')
+                        if old_task and not old_task.done():
+                            old_task.cancel()
+                        
+                        # Создаём новую задачу
+                        user_name = track_list[chat_id][str(user_id)].get('name', str(user_id))
+                        username = track_list[chat_id][str(user_id)].get('username', '')
+                        chat_entity = await msg.get_chat()
+                        chat_name = await self.get_entity_name(chat_entity)
+                        
+                        async def track_wait_and_notify():
+                            await asyncio.sleep(3600)
+                            try:
+                                saved_messages = await self.client.get_entity('me')
+                                await self.client.send_message(
+                                    saved_messages,
+                                    f"<b>⛧ Слежение ⛧</b>\n\n"
+                                    f"<b>Пользователь:</b> {user_name} {username}\n"
+                                    f"<b>Чат:</b> {chat_name}\n"
+                                    f"<b>Статус:</b> не писал 1 час",
+                                    parse_mode='html'
+                                )
+                            except Exception as e:
+                                print(f"Ошибка отправки уведомления о слежении: {e}")
+                            
+                            if chat_id in track_list and str(user_id) in track_list[chat_id]:
+                                del track_list[chat_id][str(user_id)]
+                                if not track_list[chat_id]:
+                                    del track_list[chat_id]
+                                save_track_list()
+                        
+                        new_task = asyncio.create_task(track_wait_and_notify())
+                        track_list[chat_id][str(user_id)]['task'] = new_task
                 return
             
             # Наши команды
@@ -1832,11 +1956,12 @@ class Userbot:
             elif text.startswith('.autodel'): await self.autodel_handler(msg)
             elif text.startswith('.check'): await self.check_handler(msg)
             elif text.startswith('.log'): await self.log_handler(msg)
+            elif text.startswith('.track') and not text.startswith('.trackoff') and not text.startswith('.tracklist'): await self.track_handler(msg)
+            elif text.startswith('.trackoff'): await self.trackoff_handler(msg)
+            elif text.startswith('.tracklist'): await self.tracklist_handler(msg)
             elif text.startswith('.detect ') and not text.startswith('.detectoff') and not text.startswith('.detectlist'): await self.detect_handler(msg)
             elif text.startswith('.detectoff'): await self.detectoff_handler(msg)
             elif text.startswith('.detectlist'): await self.detectlist_handler(msg)
-            elif text.startswith('.gpt') and not text.startswith('.gptoff'): await self.gpt_handler(msg)
-            elif text.startswith('.gptoff'): await self.gptoff_handler(msg)
             elif text.startswith('.help'): await self.help_handler(msg)
             elif text.startswith('.menu'): await self.menu_handler(msg)
             elif text.startswith('.more'): await self.more_handler(msg)
