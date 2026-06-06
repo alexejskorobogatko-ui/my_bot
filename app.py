@@ -6,6 +6,7 @@ import asyncio
 import threading
 import glob
 import re
+import json
 from random import choice
 from datetime import datetime, timedelta
 
@@ -42,7 +43,7 @@ API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
 TEMPLATES_DIR = "templates"
 MEDIA_DIR = "media"
 LOG_CHAT_FILE = "log_chat.txt"
-TRACK_FILE = "track_list.txt"
+TRACK_FILE = "track_list.json"
 
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 os.makedirs(MEDIA_DIR, exist_ok=True)
@@ -102,22 +103,38 @@ load_log_chat()
 active_searches = {}
 
 # ========== СЛЕЖЕНИЕ .TRACK ==========
-track_list = {}  # {chat_id: {user_id: {'task': task, 'name': name, 'username': username}}}
+track_list = {}  # {chat_id: {user_id: {'task': task, 'name': name, 'username': username, 'chat_name': chat_name}}}
 
 def load_track_list():
     global track_list
     if os.path.exists(TRACK_FILE):
         try:
-            with open(TRACK_FILE, 'r') as f:
-                import json
-                track_list = json.load(f)
+            with open(TRACK_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # Конвертируем ключи обратно в int
+                track_list = {}
+                for chat_id_str, users in data.items():
+                    chat_id = int(chat_id_str)
+                    track_list[chat_id] = {}
+                    for user_id_str, info in users.items():
+                        track_list[chat_id][int(user_id_str)] = info
         except:
             pass
 
 def save_track_list():
-    with open(TRACK_FILE, 'w') as f:
-        import json
-        json.dump(track_list, f)
+    # Конвертируем для сохранения
+    save_data = {}
+    for chat_id, users in track_list.items():
+        save_data[str(chat_id)] = {}
+        for user_id, info in users.items():
+            # Не сохраняем task (он не сериализуется)
+            save_data[str(chat_id)][str(user_id)] = {
+                'name': info.get('name', ''),
+                'username': info.get('username', ''),
+                'chat_name': info.get('chat_name', '')
+            }
+    with open(TRACK_FILE, 'w', encoding='utf-8') as f:
+        json.dump(save_data, f, ensure_ascii=False, indent=2)
 
 load_track_list()
 
@@ -458,7 +475,6 @@ class Userbot:
         if media_id:
             return get_media_path(media_id)
         elif media_url:
-            # Скачиваем по ссылке
             try:
                 response = requests.get(media_url, timeout=30)
                 if response.status_code == 200:
@@ -1155,6 +1171,9 @@ class Userbot:
         global track_list
         
         target_user = None
+        user_id = None
+        user_name = None
+        username = ""
         
         # Если реплай на сообщение
         if msg.is_reply:
@@ -1171,8 +1190,17 @@ class Userbot:
             if not args:
                 await msg.edit("<b>использование: .track @username или .track + реплай на сообщение</b>", parse_mode='html')
                 return
+            
+            arg = args.strip()
             try:
-                target_user = await self.client.get_entity(args.strip())
+                # Если аргумент — число (ID)
+                if arg.lstrip('-').isdigit():
+                    target_user = await self.client.get_entity(int(arg))
+                else:
+                    if not arg.startswith('@'):
+                        arg = '@' + arg
+                    target_user = await self.client.get_entity(arg)
+                
                 user_id = target_user.id
                 user_name = await self.get_entity_name(target_user)
                 username = f"@{target_user.username}" if target_user.username else ""
@@ -1185,8 +1213,8 @@ class Userbot:
         chat_name = await self.get_entity_name(chat_entity)
         
         # Если уже есть слежение за этим пользователем в этом чате — отменяем старую задачу
-        if chat_id in track_list and str(user_id) in track_list[chat_id]:
-            old_task = track_list[chat_id][str(user_id)].get('task')
+        if chat_id in track_list and user_id in track_list[chat_id]:
+            old_task = track_list[chat_id][user_id].get('task')
             if old_task and not old_task.done():
                 old_task.cancel()
         
@@ -1194,21 +1222,24 @@ class Userbot:
         async def track_wait_and_notify():
             await asyncio.sleep(3600)  # 1 час
             try:
-                saved_messages = await self.client.get_entity('me')
-                await self.client.send_message(
-                    saved_messages,
-                    f"<b>⛧ Слежение ⛧</b>\n\n"
-                    f"<b>Пользователь:</b> {user_name} {username}\n"
-                    f"<b>Чат:</b> {chat_name}\n"
-                    f"<b>Статус:</b> не писал 1 час",
-                    parse_mode='html'
-                )
+                # Отправляем 3 сообщения в тот же чат
+                for i in range(3):
+                    await self.client.send_message(
+                        chat_id,
+                        f"<b>⛧ Слежение ⛧</b>\n\n"
+                        f"<b>Пользователь:</b> {user_name} {username}\n"
+                        f"<b>Статус:</b> не писал 1 час\n\n"
+                        f"<b>Слежение отключено</b>",
+                        parse_mode='html'
+                    )
+                    if i < 2:
+                        await asyncio.sleep(3)  # интервал 3 секунды
             except Exception as e:
                 print(f"Ошибка отправки уведомления о слежении: {e}")
             
             # Удаляем задачу из списка после завершения
-            if chat_id in track_list and str(user_id) in track_list[chat_id]:
-                del track_list[chat_id][str(user_id)]
+            if chat_id in track_list and user_id in track_list[chat_id]:
+                del track_list[chat_id][user_id]
                 if not track_list[chat_id]:
                     del track_list[chat_id]
                 save_track_list()
@@ -1218,7 +1249,7 @@ class Userbot:
         # Сохраняем в словарь
         if chat_id not in track_list:
             track_list[chat_id] = {}
-        track_list[chat_id][str(user_id)] = {
+        track_list[chat_id][user_id] = {
             'task': task,
             'name': user_name,
             'username': username,
@@ -1230,7 +1261,7 @@ class Userbot:
             f"<b>⛧ Слежение установлено ⛧</b>\n\n"
             f"<b>Пользователь:</b> {user_name} {username}\n"
             f"<b>Чат:</b> {chat_name}\n"
-            f"<b>Условие:</b> если не напишет 1 час — уведомлю в избранное",
+            f"<b>Условие:</b> если не напишет 1 час — уведомлю в этом чате (3 раза)",
             parse_mode='html'
         )
 
@@ -1245,14 +1276,19 @@ class Userbot:
             reply_msg = await msg.get_reply_message()
             target_user = await reply_msg.get_sender()
             if target_user:
-                target_id = str(target_user.id)
+                target_id = target_user.id
         else:
             args = await self.get_args(msg)
             if args:
+                arg = args.strip()
                 try:
-                    # Пробуем получить пользователя
-                    entity = await self.client.get_entity(args.strip())
-                    target_id = str(entity.id)
+                    if arg.lstrip('-').isdigit():
+                        entity = await self.client.get_entity(int(arg))
+                    else:
+                        if not arg.startswith('@'):
+                            arg = '@' + arg
+                        entity = await self.client.get_entity(arg)
+                    target_id = entity.id
                 except Exception as e:
                     await msg.edit(f"<b>Не удалось найти пользователя: {e}</b>", parse_mode='html')
                     return
@@ -1263,11 +1299,10 @@ class Userbot:
         
         chat_id = msg.chat_id
         if chat_id in track_list and target_id in track_list[chat_id]:
-            # Отменяем задачу
             old_task = track_list[chat_id][target_id].get('task')
             if old_task and not old_task.done():
                 old_task.cancel()
-            user_name = track_list[chat_id][target_id].get('name', target_id)
+            user_name = track_list[chat_id][target_id].get('name', str(target_id))
             del track_list[chat_id][target_id]
             if not track_list[chat_id]:
                 del track_list[chat_id]
@@ -1284,7 +1319,7 @@ class Userbot:
         result = "<b>⛧ Активные слежения ⛧</b>\n\n"
         for chat_id, users in track_list.items():
             try:
-                chat_entity = await self.client.get_entity(int(chat_id))
+                chat_entity = await self.client.get_entity(chat_id)
                 chat_name = await self.get_entity_name(chat_entity)
             except:
                 chat_name = str(chat_id)
@@ -1296,7 +1331,7 @@ class Userbot:
         result += "<b>Остановить:</b> .trackoff @username или реплай"
         await msg.edit(result, parse_mode='html')
 
-    # ========== DETECT (ПОИСК ПО ВСЕМ ЧАТАМ) ==========
+    # ========== DETECT ==========
     async def detect_handler(self, msg):
         args = await self.get_args(msg)
         if not args:
@@ -1833,7 +1868,6 @@ class Userbot:
             poste_list[link]['running'] = False
         poste_list.clear()
         
-        # Останавливаем активные поиски detect
         for sid in list(active_searches.keys()):
             if active_searches[sid].get('active', False):
                 active_searches[sid]['active'] = False
@@ -1841,12 +1875,10 @@ class Userbot:
                     active_searches[sid]['task'].cancel()
             del active_searches[sid]
         
-        # Останавливаем календари
         for chat_id, task in list(self.active_calendars.items()):
             task.cancel()
         self.active_calendars.clear()
         
-        # Останавливаем слежение track
         for chat_id, users in list(track_list.items()):
             for user_id, data in list(users.items()):
                 task = data.get('task')
@@ -1864,7 +1896,6 @@ class Userbot:
 
     # ========== RUN ==========
     async def run(self):
-        # Добавляем дефолтные чаты в блок-лист при запуске
         global poste_blocklist
         DEFAULT_BLOCKLIST = [
             "@kopilimakson",
@@ -1891,47 +1922,46 @@ class Userbot:
             
             # Входящие сообщения (от других) — обрабатываем слежение track
             if not msg.out:
-                # Обработка слежения: если сообщение от отслеживаемого пользователя — сбрасываем таймер
                 chat_id = msg.chat_id
                 if chat_id in track_list:
                     user_id = msg.sender_id
-                    if str(user_id) in track_list[chat_id]:
-                        old_task = track_list[chat_id][str(user_id)].get('task')
+                    if user_id in track_list[chat_id]:
+                        old_task = track_list[chat_id][user_id].get('task')
                         if old_task and not old_task.done():
                             old_task.cancel()
                         
-                        # Создаём новую задачу
-                        user_name = track_list[chat_id][str(user_id)].get('name', str(user_id))
-                        username = track_list[chat_id][str(user_id)].get('username', '')
+                        user_name = track_list[chat_id][user_id].get('name', str(user_id))
+                        username = track_list[chat_id][user_id].get('username', '')
                         chat_entity = await msg.get_chat()
                         chat_name = await self.get_entity_name(chat_entity)
                         
                         async def track_wait_and_notify():
                             await asyncio.sleep(3600)
                             try:
-                                saved_messages = await self.client.get_entity('me')
-                                await self.client.send_message(
-                                    saved_messages,
-                                    f"<b>⛧ Слежение ⛧</b>\n\n"
-                                    f"<b>Пользователь:</b> {user_name} {username}\n"
-                                    f"<b>Чат:</b> {chat_name}\n"
-                                    f"<b>Статус:</b> не писал 1 час",
-                                    parse_mode='html'
-                                )
+                                for i in range(3):
+                                    await self.client.send_message(
+                                        chat_id,
+                                        f"<b>⛧ Слежение ⛧</b>\n\n"
+                                        f"<b>Пользователь:</b> {user_name} {username}\n"
+                                        f"<b>Статус:</b> не писал 1 час\n\n"
+                                        f"<b>Слежение отключено</b>",
+                                        parse_mode='html'
+                                    )
+                                    if i < 2:
+                                        await asyncio.sleep(3)
                             except Exception as e:
                                 print(f"Ошибка отправки уведомления о слежении: {e}")
                             
-                            if chat_id in track_list and str(user_id) in track_list[chat_id]:
-                                del track_list[chat_id][str(user_id)]
+                            if chat_id in track_list and user_id in track_list[chat_id]:
+                                del track_list[chat_id][user_id]
                                 if not track_list[chat_id]:
                                     del track_list[chat_id]
                                 save_track_list()
                         
                         new_task = asyncio.create_task(track_wait_and_notify())
-                        track_list[chat_id][str(user_id)]['task'] = new_task
+                        track_list[chat_id][user_id]['task'] = new_task
                 return
             
-            # Наши команды
             if not text:
                 return
             
@@ -1985,7 +2015,6 @@ class Userbot:
 
 # ==================== ЗАПУСК ====================
 if __name__ == "__main__":
-    # Добавляем переменные для медиа меню
     more_media = None
     custom_media = None
     rasset_media = None
