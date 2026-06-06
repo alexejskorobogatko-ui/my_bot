@@ -2,4 +2,3 @@ telethon
 flask
 requests
 psutil
-g4f
