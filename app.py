@@ -2306,16 +2306,15 @@ class Userbot:
         await self.client.run_until_disconnected()
 
 
-# ==================== ЗАПУСК ВСЕХ ТРЁХ АККАУНТОВ ====================
+# ==================== ЗАПУСК ВСЕХ ДВУХ АККАУНТОВ ====================
 async def main():
-    """Запускает все 3 аккаунта одновременно"""
+    """Запускает все аккаунты из списка ACCOUNTS"""
     bots = []
-    for i in range(3):
+    for i in range(len(ACCOUNTS)):  # ← ТЕПЕРЬ АВТОМАТИЧЕСКИ
         bot = Userbot(i)
         bots.append(bot)
         asyncio.create_task(bot.run())
     
-    # Ждём вечно
     await asyncio.Event().wait()
 
 
