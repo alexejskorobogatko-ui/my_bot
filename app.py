@@ -34,7 +34,7 @@ def run_web():
     port = int(os.environ.get("PORT", 8080))
     web_app.run(host="0.0.0.0", port=port)
 
-# ==================== ДАННЫЕ ДЛЯ АККАУНТОВ (3 штуки) ====================
+# ==================== ДАННЫЕ ДЛЯ АККАУНТОВ ====================
 ACCOUNTS = [
     {
         'session': 'session1',
@@ -52,7 +52,6 @@ ACCOUNTS = [
 TEMPLATES_DIR = "templates"
 MEDIA_DIR = "media"
 LOG_CHAT_FILE = "log_chat.txt"
-TRACK_FILE = "track_list.json"
 
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 os.makedirs(MEDIA_DIR, exist_ok=True)
@@ -76,28 +75,18 @@ if not os.path.exists(default_template_path):
     with open(default_template_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(DEFAULT_SHABLON))
 
-# ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (общие для всех аккаунтов) ====================
-spam_state = {}
+# ========== ОБЩИЕ ДЛЯ ВСЕХ АККАУНТОВ (НЕ ЗАВИСЯТ ОТ АККАУНТА) ==========
 start_time = time.time()
-tagger_chats = {}
-autodel_tasks = {}
 mid = 'https://x0.at/cUQa.jpg'
 name = "Ralvatron"
 mh = 'https://x0.at/5-ku.mp4'
 mm = 'https://x0.at/5-ku.mp4'
 cmds = 'https://x0.at/Dv0D.jpg'
 status_media = None
-
-# ========== АВТООТВЕТЧИК ==========
-autoreply_list = []
-autoreply_time = {}
-autoreply_photo = {}
-autoreply_shpk = {}
-autoreply_spam_tracker = {}
+log_chat_id = None
+ping_history = []
 
 # ========== ЛОГ-ЧАТ ==========
-log_chat_id = None
-
 def load_log_chat():
     global log_chat_id
     if os.path.exists(LOG_CHAT_FILE):
@@ -115,43 +104,7 @@ def save_log_chat(chat_ref):
 
 load_log_chat()
 
-# ========== АКТИВНЫЕ ПОИСКИ .DETECT ==========
-active_searches = {}
-
-# ========== СЛЕЖЕНИЕ .TRACK ==========
-track_list = {}
-
-def load_track_list():
-    global track_list
-    if os.path.exists(TRACK_FILE):
-        try:
-            with open(TRACK_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                track_list = {}
-                for chat_id_str, users in data.items():
-                    chat_id = int(chat_id_str)
-                    track_list[chat_id] = {}
-                    for user_id_str, info in users.items():
-                        track_list[chat_id][int(user_id_str)] = info
-        except:
-            pass
-
-def save_track_list():
-    save_data = {}
-    for chat_id, users in track_list.items():
-        save_data[str(chat_id)] = {}
-        for user_id, info in users.items():
-            save_data[str(chat_id)][str(user_id)] = {
-                'name': info.get('name', ''),
-                'username': info.get('username', ''),
-                'chat_name': info.get('chat_name', '')
-            }
-    with open(TRACK_FILE, 'w', encoding='utf-8') as f:
-        json.dump(save_data, f, ensure_ascii=False, indent=2)
-
-load_track_list()
-
-# ========== ТЕКУЩИЙ ШАБЛОН ==========
+# ========== ТЕКУЩИЙ ШАБЛОН (ОБЩИЙ) ==========
 current_shablon = []
 current_template_name = "main"
 
@@ -190,7 +143,7 @@ def get_all_templates():
 
 load_template("main")
 
-# ========== МЕДИА ХРАНИЛИЩЕ ==========
+# ========== МЕДИА ХРАНИЛИЩЕ (ОБЩЕЕ) ==========
 def get_media_path(media_id):
     pattern = os.path.join(MEDIA_DIR, f"{media_id}.*")
     files = glob.glob(pattern)
@@ -220,13 +173,6 @@ def get_all_media():
         size = os.path.getsize(f)
         result.append((name, ext[1:], size))
     return result
-
-# ========== АВТО-ПИАР ==========
-poste_list = {}
-poste_blocklist = []
-
-# ========== ПИНГ СТАТИСТИКА ==========
-ping_history = []
 
 # ==================== ТЕКСТЫ МЕНЮ ====================
 menutext = """
@@ -392,7 +338,7 @@ commands_text = """
 ⛧ Владелец: @misosphere
 """
 
-# ==================== КЛАСС ЮЗЕРБОТА (ОДИН ЭКЗЕМПЛЯР) ====================
+# ==================== КЛАСС ЮЗЕРБОТА (ВСЕ ПЕРЕМЕННЫЕ ВНУТРИ) ====================
 class Userbot:
     def __init__(self, account_index):
         self.account_index = account_index
@@ -402,10 +348,61 @@ class Userbot:
             self.config['api_id'],
             self.config['api_hash']
         )
+        
+        # ===== КАЖДЫЙ АККАУНТ ИМЕЕТ СВОИ ПЕРЕМЕННЫЕ =====
+        self.spam_state = {}
+        self.tagger_chats = {}
+        self.autodel_tasks = {}
         self.target_user = None
         self._target_timer_task = None
         self.target_chat_id_for_timer = None
         self.active_calendars = {}
+        
+        # Автоответчик (свой для каждого аккаунта)
+        self.autoreply_list = []
+        self.autoreply_time = {}
+        self.autoreply_photo = {}
+        self.autoreply_shpk = {}
+        self.autoreply_spam_tracker = {}
+        
+        # Поиски и слежения (свои для каждого аккаунта)
+        self.active_searches = {}
+        self.track_list = {}
+        self.track_file = f"track_list_{account_index+1}.json"
+        
+        # Постинг (свой для каждого аккаунта)
+        self.poste_list = {}
+        self.poste_blocklist = []
+        
+        # Загружаем трек-лист для этого аккаунта
+        self.load_track_list()
+
+    def load_track_list(self):
+        if os.path.exists(self.track_file):
+            try:
+                with open(self.track_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self.track_list = {}
+                    for chat_id_str, users in data.items():
+                        chat_id = int(chat_id_str)
+                        self.track_list[chat_id] = {}
+                        for user_id_str, info in users.items():
+                            self.track_list[chat_id][int(user_id_str)] = info
+            except:
+                pass
+
+    def save_track_list(self):
+        save_data = {}
+        for chat_id, users in self.track_list.items():
+            save_data[str(chat_id)] = {}
+            for user_id, info in users.items():
+                save_data[str(chat_id)][str(user_id)] = {
+                    'name': info.get('name', ''),
+                    'username': info.get('username', ''),
+                    'chat_name': info.get('chat_name', '')
+                }
+        with open(self.track_file, 'w', encoding='utf-8') as f:
+            json.dump(save_data, f, ensure_ascii=False, indent=2)
 
     async def get_args(self, msg):
         try:
@@ -516,22 +513,20 @@ class Userbot:
 
     # ========== АВТООТВЕТЧИК ==========
     async def watcher(self, msg):
-        global autoreply_spam_tracker
-        
         if not msg.out:
             user_id = msg.sender_id
             
-            if user_id in autoreply_list:
+            if user_id in self.autoreply_list:
                 current_time = time.time()
                 
-                if user_id not in autoreply_spam_tracker:
-                    autoreply_spam_tracker[user_id] = {
+                if user_id not in self.autoreply_spam_tracker:
+                    self.autoreply_spam_tracker[user_id] = {
                         'count': 0,
                         'last_time': current_time,
                         'last_reply_time': 0
                     }
                 
-                tracker = autoreply_spam_tracker[user_id]
+                tracker = self.autoreply_spam_tracker[user_id]
                 
                 if current_time - tracker['last_time'] < 2:
                     tracker['count'] += 1
@@ -544,20 +539,19 @@ class Userbot:
                     if current_time - tracker['last_reply_time'] >= 3:
                         should_reply = True
                 else:
-                    last_reply = autoreply_spam_tracker.get(user_id, {}).get('last_reply_time', 0)
-                    delay = autoreply_time.get(user_id, 1)
+                    last_reply = self.autoreply_spam_tracker.get(user_id, {}).get('last_reply_time', 0)
+                    delay = self.autoreply_time.get(user_id, 1)
                     if current_time - last_reply >= delay:
                         should_reply = True
                 
                 if should_reply:
                     tracker['last_reply_time'] = current_time
-                    await asyncio.sleep(autoreply_time.get(user_id, 1))
-                    text = autoreply_shpk.get(user_id, '') + " " + choice(current_shablon) if autoreply_shpk.get(user_id) else choice(current_shablon)
-                    await msg.reply(text, file=autoreply_photo.get(user_id), parse_mode='html')
+                    await asyncio.sleep(self.autoreply_time.get(user_id, 1))
+                    text = self.autoreply_shpk.get(user_id, '') + " " + choice(current_shablon) if self.autoreply_shpk.get(user_id) else choice(current_shablon)
+                    await msg.reply(text, file=self.autoreply_photo.get(user_id), parse_mode='html')
 
     # ========== АВТООТВЕТЧИК КОМАНДЫ ==========
     async def autoreply_handler(self, msg):
-        global autoreply_photo, autoreply_list, autoreply_time, autoreply_shpk, autoreply_spam_tracker
         args = msg.text.split()
         if len(args) < 1:
             return
@@ -568,11 +562,11 @@ class Userbot:
             if msg.is_reply:
                 user_id = (await msg.get_reply_message()).sender_id
                 shapka = ' '.join(args[1:]) if len(args) > 1 else ''
-                if user_id not in autoreply_list:
-                    autoreply_list.append(user_id)
-                autoreply_shpk[user_id] = shapka
-                autoreply_time[user_id] = 1
-                autoreply_photo[user_id] = None
+                if user_id not in self.autoreply_list:
+                    self.autoreply_list.append(user_id)
+                self.autoreply_shpk[user_id] = shapka
+                self.autoreply_time[user_id] = 1
+                self.autoreply_photo[user_id] = None
                 await msg.edit(f'<b>⛧ АВТООТВЕТЧИК ВКЛЮЧЕН ⛧</b>\n\n<b>Жертва:</b> <code>{user_id}</code>\n<b>Шапка:</b> {shapka if shapka else "нет"}\n<b>Задержка:</b> 1 сек\n\n<b>Остановить:</b> .aaoff {user_id}', parse_mode='html')
             elif len(args) >= 2:
                 target = args[1]
@@ -585,11 +579,11 @@ class Userbot:
                         entity = await self.client.get_entity(target)
                     user_id = entity.id
                     shapka = ' '.join(args[2:]) if len(args) > 2 else ''
-                    if user_id not in autoreply_list:
-                        autoreply_list.append(user_id)
-                    autoreply_shpk[user_id] = shapka
-                    autoreply_time[user_id] = 1
-                    autoreply_photo[user_id] = None
+                    if user_id not in self.autoreply_list:
+                        self.autoreply_list.append(user_id)
+                    self.autoreply_shpk[user_id] = shapka
+                    self.autoreply_time[user_id] = 1
+                    self.autoreply_photo[user_id] = None
                     name = entity.first_name or entity.username or str(user_id)
                     await msg.edit(f'<b>⛧ АВТООТВЕТЧИК ВКЛЮЧЕН ⛧</b>\n\n<b>Жертва:</b> {name} (<code>{user_id}</code>)\n<b>Шапка:</b> {shapka if shapka else "нет"}\n<b>Задержка:</b> 1 сек\n\n<b>Остановить:</b> .aaoff {user_id}', parse_mode='html')
                 except Exception as e:
@@ -615,41 +609,41 @@ class Userbot:
             else:
                 user_id = None
             
-            if user_id and user_id in autoreply_list:
-                autoreply_list.remove(user_id)
-                autoreply_time.pop(user_id, None)
-                autoreply_photo.pop(user_id, None)
-                autoreply_shpk.pop(user_id, None)
-                if user_id in autoreply_spam_tracker:
-                    del autoreply_spam_tracker[user_id]
+            if user_id and user_id in self.autoreply_list:
+                self.autoreply_list.remove(user_id)
+                self.autoreply_time.pop(user_id, None)
+                self.autoreply_photo.pop(user_id, None)
+                self.autoreply_shpk.pop(user_id, None)
+                if user_id in self.autoreply_spam_tracker:
+                    del self.autoreply_spam_tracker[user_id]
                 await msg.edit(f'<b>⛧ АВТООТВЕТЧИК ВЫКЛЮЧЕН ⛧</b>\n\n<b>Жертва:</b> <code>{user_id}</code>', parse_mode='html')
             else:
                 await msg.edit('<b>⛧ ОШИБКА ⛧</b>\n\nАвтоответчик на этого пользователя не найден', parse_mode='html')
         
         elif cmd == '.aa_list':
-            if not autoreply_list:
+            if not self.autoreply_list:
                 await msg.edit('<b>⛧ НЕТ АКТИВНЫХ АВТООТВЕТЧИКОВ ⛧</b>', parse_mode='html')
                 return
             
             result = "<b>⛧ АКТИВНЫЕ АВТООТВЕТЧИКИ ⛧</b>\n\n"
-            for uid in autoreply_list:
+            for uid in self.autoreply_list:
                 try:
                     entity = await self.client.get_entity(uid)
                     name = entity.first_name or entity.username or str(uid)
                     result += f"<b>Жертва:</b> {name} (<code>{uid}</code>)\n"
-                    result += f"<b>Задержка:</b> {autoreply_time.get(uid, 1)} сек\n"
-                    result += f"<b>Шапка:</b> {autoreply_shpk.get(uid, 'нет')}\n\n"
+                    result += f"<b>Задержка:</b> {self.autoreply_time.get(uid, 1)} сек\n"
+                    result += f"<b>Шапка:</b> {self.autoreply_shpk.get(uid, 'нет')}\n\n"
                 except:
                     result += f"<b>Жертва:</b> <code>{uid}</code>\n"
-                    result += f"<b>Задержка:</b> {autoreply_time.get(uid, 1)} сек\n\n"
+                    result += f"<b>Задержка:</b> {self.autoreply_time.get(uid, 1)} сек\n\n"
             await msg.edit(result, parse_mode='html')
         
         elif cmd == '.aa_time' and len(args) >= 3:
             try:
                 user_id = int(args[1])
                 delay = int(args[2])
-                if user_id in autoreply_list:
-                    autoreply_time[user_id] = delay
+                if user_id in self.autoreply_list:
+                    self.autoreply_time[user_id] = delay
                     await msg.edit(f'<b>⛧ ЗАДЕРЖКА ИЗМЕНЕНА ⛧</b>\n\n<b>Жертва:</b> <code>{user_id}</code>\n<b>Новая задержка:</b> {delay} сек', parse_mode='html')
                 else:
                     await msg.edit(f'<b>⛧ ОШИБКА ⛧</b>\n\nАвтоответчик на <code>{user_id}</code> не активен', parse_mode='html')
@@ -660,8 +654,8 @@ class Userbot:
             try:
                 user_id = int(args[1])
                 shapka = ' '.join(args[2:])
-                if user_id in autoreply_list:
-                    autoreply_shpk[user_id] = shapka
+                if user_id in self.autoreply_list:
+                    self.autoreply_shpk[user_id] = shapka
                     await msg.edit(f'<b>⛧ ШАПКА ИЗМЕНЕНА ⛧</b>\n\n<b>Жертва:</b> <code>{user_id}</code>\n<b>Новая шапка:</b> {shapka}', parse_mode='html')
                 else:
                     await msg.edit(f'<b>⛧ ОШИБКА ⛧</b>\n\nАвтоответчик на <code>{user_id}</code> не активен', parse_mode='html')
@@ -672,8 +666,8 @@ class Userbot:
             try:
                 user_id = int(args[1])
                 media = args[2] if 'http' in args[2] else None
-                if user_id in autoreply_list and media:
-                    autoreply_photo[user_id] = media
+                if user_id in self.autoreply_list and media:
+                    self.autoreply_photo[user_id] = media
                     await msg.edit(f'<b>⛧ МЕДИА ИЗМЕНЕНО ⛧</b>\n\n<b>Жертва:</b> <code>{user_id}</code>', parse_mode='html')
                 else:
                     await msg.edit(f'<b>⛧ ОШИБКА ⛧</b>\n\nАвтоответчик не активен или ссылка невалидна', parse_mode='html')
@@ -682,7 +676,6 @@ class Userbot:
 
     # ========== СПАМ ==========
     async def renewal_handler(self, msg):
-        global spam_state
         args = await self.get_args(msg)
         if not args:
             await msg.edit("<b>аргументы не указаны. Пример: .avt 5 med:1 ебал твою мать</b>", parse_mode='html')
@@ -704,10 +697,10 @@ class Userbot:
         reply = await msg.get_reply_message()
         chat_id = msg.chat_id
         
-        spam_state[chat_id] = True
+        self.spam_state[chat_id] = True
         await msg.edit(f'<b>⛧ СПАМ ВКЛЮЧЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>\n\n<b>Выключить:</b> <code>.stop {chat_id}</code>', parse_mode='html')
         
-        while chat_id in spam_state and spam_state[chat_id]:
+        while chat_id in self.spam_state and self.spam_state[chat_id]:
             try:
                 random_phrase = choice(current_shablon) if current_shablon else ""
                 if custom_text:
@@ -723,14 +716,23 @@ class Userbot:
                 print(f"[Аккаунт {self.account_index+1}] Спам ошибка: {e}")
             await asyncio.sleep(time_val)
         
-        if chat_id in spam_state:
-            del spam_state[chat_id]
+        if chat_id in self.spam_state:
+            del self.spam_state[chat_id]
         
         if media_url and media_path and os.path.exists(media_path):
             try:
                 os.remove(media_path)
             except:
                 pass
+
+    async def stop_handler(self, msg):
+        args = await self.get_args(msg)
+        chat_id = int(args.split()[0]) if args else msg.chat_id
+        if chat_id in self.spam_state:
+            del self.spam_state[chat_id]
+            await msg.edit(f"<b>⛧ СПАМ ОСТАНОВЛЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
+        else:
+            await msg.edit(f"<b>⛧ СПАМ НЕ БЫЛ АКТИВЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
 
     # ========== ТЕГГЕР ==========
     async def tagger_handler(self, msg):
@@ -761,10 +763,10 @@ class Userbot:
         reply_to_msg = await msg.get_reply_message()
         chat_id = reply_to_msg.chat_id if reply_to_msg else msg.chat_id
         
-        tagger_chats[chat_id] = True
+        self.tagger_chats[chat_id] = True
         await msg.edit(f'<b>⛧ ТЕГГЕР ВКЛЮЧЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>\n<b>Жертва:</b> <code>{user_id}</code>\n\n<b>Выключить:</b> <code>.off {chat_id}</code>', parse_mode='html')
         
-        while chat_id in tagger_chats:
+        while chat_id in self.tagger_chats:
             random_phrase = choice(current_shablon) if current_shablon else ""
             if custom_text:
                 base_text = f"{custom_text} {random_phrase}".strip()
@@ -782,14 +784,23 @@ class Userbot:
                 print(f"[Аккаунт {self.account_index+1}] Теггер ошибка: {e}")
             await asyncio.sleep(time_val)
         
-        if chat_id in tagger_chats:
-            del tagger_chats[chat_id]
+        if chat_id in self.tagger_chats:
+            del self.tagger_chats[chat_id]
         
         if media_url and media_path and os.path.exists(media_path):
             try:
                 os.remove(media_path)
             except:
                 pass
+
+    async def off_handler(self, msg):
+        args = await self.get_args(msg)
+        chat_id = int(args.split()[0]) if args else msg.chat_id
+        if chat_id in self.tagger_chats:
+            del self.tagger_chats[chat_id]
+            await msg.edit(f"<b>⛧ ТЕГГЕР ОСТАНОВЛЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
+        else:
+            await msg.edit(f"<b>⛧ ТЕГГЕР НЕ БЫЛ АКТИВЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
 
     # ========== СТАТУС ==========
     async def status_handler(self, msg):
@@ -801,10 +812,10 @@ class Userbot:
         me = await self.client.get_me()
         target_info = self.target_user if self.target_user else "не установлена"
         
-        spam_text = f"{len(spam_state)} активных"
-        if spam_state:
+        spam_text = f"{len(self.spam_state)} активных"
+        if self.spam_state:
             spam_text += "\n"
-            for chat_id in spam_state:
+            for chat_id in self.spam_state:
                 try:
                     chat_entity = await self.client.get_entity(chat_id)
                     chat_name = await self.get_entity_name(chat_entity)
@@ -814,10 +825,10 @@ class Userbot:
         else:
             spam_text += "\n  • нет"
         
-        tagger_text = f"{len(tagger_chats)} активных"
-        if tagger_chats:
+        tagger_text = f"{len(self.tagger_chats)} активных"
+        if self.tagger_chats:
             tagger_text += "\n"
-            for chat_id in tagger_chats:
+            for chat_id in self.tagger_chats:
                 try:
                     chat_entity = await self.client.get_entity(chat_id)
                     chat_name = await self.get_entity_name(chat_entity)
@@ -827,30 +838,30 @@ class Userbot:
         else:
             tagger_text += "\n  • нет"
         
-        aa_text = f"{len(autoreply_list)} активных"
-        if autoreply_list:
+        aa_text = f"{len(self.autoreply_list)} активных"
+        if self.autoreply_list:
             aa_text += "\n"
-            for uid in autoreply_list:
+            for uid in self.autoreply_list:
                 try:
                     entity = await self.client.get_entity(uid)
                     name = entity.first_name or entity.username or str(uid)
                     aa_text += f"\n  • {name} (<code>{uid}</code>)"
-                    aa_text += f"\n    ⏱ задержка: {autoreply_time.get(uid, 1)} сек"
-                    aa_text += f"\n    📝 шапка: {autoreply_shpk.get(uid, 'нет')[:50]}"
+                    aa_text += f"\n    ⏱ задержка: {self.autoreply_time.get(uid, 1)} сек"
+                    aa_text += f"\n    📝 шапка: {self.autoreply_shpk.get(uid, 'нет')[:50]}"
                 except:
                     aa_text += f"\n  • <code>{uid}</code>"
         else:
             aa_text += "\n  • нет"
         
-        poste_text = f"{len(poste_list)} активных" if poste_list else "нет"
-        blocklist_text = f"{len(poste_blocklist)} чатов" if poste_blocklist else "нет"
-        detect_text = f"{len(active_searches)} активных" if active_searches else "нет"
+        poste_text = f"{len(self.poste_list)} активных" if self.poste_list else "нет"
+        blocklist_text = f"{len(self.poste_blocklist)} чатов" if self.poste_blocklist else "нет"
+        detect_text = f"{len(self.active_searches)} активных" if self.active_searches else "нет"
         
         track_text = ""
-        if track_list:
-            total = sum(len(users) for users in track_list.values())
+        if self.track_list:
+            total = sum(len(users) for users in self.track_list.values())
             track_text = f"{total} активных"
-            for chat_id, users in track_list.items():
+            for chat_id, users in self.track_list.items():
                 try:
                     chat_entity = await self.client.get_entity(chat_id)
                     chat_name = await self.get_entity_name(chat_entity)
@@ -1096,26 +1107,6 @@ class Userbot:
         
         result = f"<b>⛧ Аптайм:</b> {uptime_str}\n<b>⛧ Пинг:</b> {ping_ms} ms\n<b>⛧ Средний:</b> {avg_ping} ms (посл. {len(ping_history)})\n<b>⛧ Мин / Макс:</b> {min_ping} ms / {max_ping} ms"
         await msg.edit(result, parse_mode='html')
-
-    async def stop_handler(self, msg):
-        global spam_state
-        args = await self.get_args(msg)
-        chat_id = int(args.split()[0]) if args else msg.chat_id
-        if chat_id in spam_state:
-            del spam_state[chat_id]
-            await msg.edit(f"<b>⛧ СПАМ ОСТАНОВЛЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
-        else:
-            await msg.edit(f"<b>⛧ СПАМ НЕ БЫЛ АКТИВЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
-
-    async def off_handler(self, msg):
-        global tagger_chats
-        args = await self.get_args(msg)
-        chat_id = int(args.split()[0]) if args else msg.chat_id
-        if chat_id in tagger_chats:
-            del tagger_chats[chat_id]
-            await msg.edit(f"<b>⛧ ТЕГГЕР ОСТАНОВЛЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
-        else:
-            await msg.edit(f"<b>⛧ ТЕГГЕР НЕ БЫЛ АКТИВЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
 
     async def target_handler(self, msg):
         args = await self.get_args(msg)
@@ -1388,8 +1379,8 @@ class Userbot:
             return
         
         chat_id = msg.chat_id
-        if chat_id in autodel_tasks:
-            autodel_tasks[chat_id].cancel()
+        if chat_id in self.autodel_tasks:
+            self.autodel_tasks[chat_id].cancel()
         
         async def auto_delete():
             await asyncio.sleep(delay)
@@ -1400,11 +1391,11 @@ class Userbot:
             except Exception as e:
                 print(f"[Аккаунт {self.account_index+1}] Autodel ошибка: {e}")
             finally:
-                if chat_id in autodel_tasks:
-                    del autodel_tasks[chat_id]
+                if chat_id in self.autodel_tasks:
+                    del self.autodel_tasks[chat_id]
         
         task = asyncio.create_task(auto_delete())
-        autodel_tasks[chat_id] = task
+        self.autodel_tasks[chat_id] = task
         await msg.edit(f"<b>⛧ АВТОУДАЛЕНИЕ ВКЛЮЧЕНО ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>\n<b>Удаление через:</b> {delay} сек", parse_mode='html')
 
     async def check_handler(self, msg):
@@ -1458,8 +1449,6 @@ class Userbot:
             await msg.edit("<b>⛧ Ошибка установки лог-чата ⛧</b>\n\n<b>Причина:</b> Не удалось найти чат. Убедитесь, что ваш аккаунт является участником этого чата, и попробуйте снова.", parse_mode='html')
 
     async def track_handler(self, msg):
-        global track_list
-        
         target_user = None
         user_id = None
         user_name = None
@@ -1500,8 +1489,8 @@ class Userbot:
         chat_entity = await msg.get_chat()
         chat_name = await self.get_entity_name(chat_entity)
         
-        if chat_id in track_list and user_id in track_list[chat_id]:
-            old_task = track_list[chat_id][user_id].get('task')
+        if chat_id in self.track_list and user_id in self.track_list[chat_id]:
+            old_task = self.track_list[chat_id][user_id].get('task')
             if old_task and not old_task.done():
                 old_task.cancel()
         
@@ -1522,23 +1511,23 @@ class Userbot:
             except Exception as e:
                 print(f"[Аккаунт {self.account_index+1}] Ошибка отправки уведомления о слежении: {e}")
             
-            if chat_id in track_list and user_id in track_list[chat_id]:
-                del track_list[chat_id][user_id]
-                if not track_list[chat_id]:
-                    del track_list[chat_id]
-                save_track_list()
+            if chat_id in self.track_list and user_id in self.track_list[chat_id]:
+                del self.track_list[chat_id][user_id]
+                if not self.track_list[chat_id]:
+                    del self.track_list[chat_id]
+                self.save_track_list()
         
         task = asyncio.create_task(track_wait_and_notify())
         
-        if chat_id not in track_list:
-            track_list[chat_id] = {}
-        track_list[chat_id][user_id] = {
+        if chat_id not in self.track_list:
+            self.track_list[chat_id] = {}
+        self.track_list[chat_id][user_id] = {
             'task': task,
             'name': user_name,
             'username': username,
             'chat_name': chat_name
         }
-        save_track_list()
+        self.save_track_list()
         
         await msg.edit(
             f"<b>⛧ Слежение установлено ⛧</b>\n\n"
@@ -1549,8 +1538,6 @@ class Userbot:
         )
 
     async def trackoff_handler(self, msg):
-        global track_list
-        
         target_id = None
         
         if msg.is_reply:
@@ -1579,26 +1566,26 @@ class Userbot:
             return
         
         chat_id = msg.chat_id
-        if chat_id in track_list and target_id in track_list[chat_id]:
-            old_task = track_list[chat_id][target_id].get('task')
+        if chat_id in self.track_list and target_id in self.track_list[chat_id]:
+            old_task = self.track_list[chat_id][target_id].get('task')
             if old_task and not old_task.done():
                 old_task.cancel()
-            user_name = track_list[chat_id][target_id].get('name', str(target_id))
-            del track_list[chat_id][target_id]
-            if not track_list[chat_id]:
-                del track_list[chat_id]
-            save_track_list()
+            user_name = self.track_list[chat_id][target_id].get('name', str(target_id))
+            del self.track_list[chat_id][target_id]
+            if not self.track_list[chat_id]:
+                del self.track_list[chat_id]
+            self.save_track_list()
             await msg.edit(f"<b>⛧ Слежение отключено для пользователя {user_name}</b>", parse_mode='html')
         else:
             await msg.edit("<b>⛧ Слежение на этого пользователя не найдено</b>", parse_mode='html')
 
     async def tracklist_handler(self, msg):
-        if not track_list:
+        if not self.track_list:
             await msg.edit("<b>⛧ Нет активных слежений</b>", parse_mode='html')
             return
         
         result = "<b>⛧ Активные слежения ⛧</b>\n\n"
-        for chat_id, users in track_list.items():
+        for chat_id, users in self.track_list.items():
             try:
                 chat_entity = await self.client.get_entity(chat_id)
                 chat_name = await self.get_entity_name(chat_entity)
@@ -1623,7 +1610,7 @@ class Userbot:
             await msg.edit("<b>фраза должна содержать минимум 3 символа</b>", parse_mode='html')
             return
         
-        search_id = len(active_searches) + 1
+        search_id = len(self.active_searches) + 1
         original_chat_id = msg.chat_id
         
         await msg.edit(f"<b>⛧ Поиск запущен ⛧</b>\n\n<b>Фраза:</b> {phrase}\n<b>Статус:</b> поиск...\n<b>ID поиска:</b> {search_id}\n\nРезультаты появятся здесь по мере нахождения.", parse_mode='html')
@@ -1635,12 +1622,12 @@ class Userbot:
             try:
                 dialogs = await self.client.get_dialogs()
                 for dialog in dialogs:
-                    if not active_searches.get(search_id, {}).get('active', True):
+                    if not self.active_searches.get(search_id, {}).get('active', True):
                         break
                     
                     try:
                         async for message in self.client.iter_messages(dialog.id, limit=500, search=phrase):
-                            if not active_searches.get(search_id, {}).get('active', True):
+                            if not self.active_searches.get(search_id, {}).get('active', True):
                                 break
                             
                             if message.text and phrase.lower() in message.text.lower():
@@ -1692,16 +1679,16 @@ class Userbot:
                 except Exception as e:
                     print(f"[Аккаунт {self.account_index+1}] Ошибка отправки отчёта: {e}")
                 
-                if search_id in active_searches:
-                    del active_searches[search_id]
+                if search_id in self.active_searches:
+                    del self.active_searches[search_id]
                     
             except Exception as e:
                 await msg.edit(f"<b>Ошибка при поиске: {e}</b>", parse_mode='html')
-                if search_id in active_searches:
-                    del active_searches[search_id]
+                if search_id in self.active_searches:
+                    del self.active_searches[search_id]
         
         task = asyncio.create_task(search_task())
-        active_searches[search_id] = {
+        self.active_searches[search_id] = {
             'task': task,
             'phrase': phrase,
             'chat_id': original_chat_id,
@@ -1713,12 +1700,12 @@ class Userbot:
         
         if not args:
             count = 0
-            for sid in list(active_searches.keys()):
-                if active_searches[sid].get('active', False):
-                    active_searches[sid]['active'] = False
-                    if active_searches[sid].get('task'):
-                        active_searches[sid]['task'].cancel()
-                    del active_searches[sid]
+            for sid in list(self.active_searches.keys()):
+                if self.active_searches[sid].get('active', False):
+                    self.active_searches[sid]['active'] = False
+                    if self.active_searches[sid].get('task'):
+                        self.active_searches[sid]['task'].cancel()
+                    del self.active_searches[sid]
                     count += 1
             if count > 0:
                 await msg.edit(f"<b>Остановлено {count} активных поисков</b>", parse_mode='html')
@@ -1728,12 +1715,12 @@ class Userbot:
         
         try:
             search_id = int(args.strip())
-            if search_id in active_searches:
-                active_searches[search_id]['active'] = False
-                if active_searches[search_id].get('task'):
-                    active_searches[search_id]['task'].cancel()
-                phrase = active_searches[search_id]['phrase']
-                del active_searches[search_id]
+            if search_id in self.active_searches:
+                self.active_searches[search_id]['active'] = False
+                if self.active_searches[search_id].get('task'):
+                    self.active_searches[search_id]['task'].cancel()
+                phrase = self.active_searches[search_id]['phrase']
+                del self.active_searches[search_id]
                 await msg.edit(f"<b>Поиск #{search_id} остановлен\nФраза: {phrase}</b>", parse_mode='html')
             else:
                 await msg.edit(f"<b>Поиск #{search_id} не найден</b>", parse_mode='html')
@@ -1741,12 +1728,12 @@ class Userbot:
             await msg.edit("<b>укажите ID поиска\nпример: .detectoff 1</b>", parse_mode='html')
 
     async def detectlist_handler(self, msg):
-        if not active_searches:
+        if not self.active_searches:
             await msg.edit("<b>Нет активных поисков</b>", parse_mode='html')
             return
         
         result = "<b>⛧ АКТИВНЫЕ ПОИСКИ ⛧</b>\n\n"
-        for sid, data in active_searches.items():
+        for sid, data in self.active_searches.items():
             result += f"<b>ID:</b> {sid}\n<b>Фраза:</b> {data['phrase']}\n\n"
         result += "<b>Остановить:</b> .detectoff [ID]"
         
@@ -1902,7 +1889,6 @@ class Userbot:
 
     # ========== POST COMMANDS ==========
     async def poste_handler(self, msg):
-        global poste_list, poste_blocklist
         args = await self.get_args(msg)
         if not args:
             return await msg.edit("<b>использование: .poste ссылка_на_пост минуты</b>", parse_mode='html')
@@ -1920,7 +1906,7 @@ class Userbot:
         if interval < 1:
             return await msg.edit("<b>интервал не может быть меньше 1 минуты</b>", parse_mode='html')
         
-        if link in poste_list:
+        if link in self.poste_list:
             return await msg.edit(f"<b>рассылка для {link} уже запущена</b>", parse_mode='html')
         
         if not link.startswith("https://t.me/"):
@@ -1957,7 +1943,7 @@ class Userbot:
                 continue
             if d.is_user:
                 continue
-            if d.entity.id in poste_blocklist:
+            if d.entity.id in self.poste_blocklist:
                 continue
             target_chats.append(d.entity.id)
         
@@ -1966,7 +1952,7 @@ class Userbot:
         
         start_time_poste = time.time()
         
-        poste_list[link] = {
+        self.poste_list[link] = {
             'chats': target_chats,
             'interval': interval,
             'running': True,
@@ -1980,17 +1966,17 @@ class Userbot:
         asyncio.create_task(self._poste_worker(link))
 
     async def _poste_worker(self, link):
-        global poste_list, log_chat_id
+        global log_chat_id
         
-        while poste_list.get(link, {}).get('running', False):
-            data = poste_list[link]
+        while self.poste_list.get(link, {}).get('running', False):
+            data = self.poste_list[link]
             original_chat = data['original_chat']
             interval_minutes = data['interval']
             success = 0
             fail = 0
             
             for chat_id in data['chats']:
-                if not poste_list.get(link, {}).get('running', False):
+                if not self.poste_list.get(link, {}).get('running', False):
                     break
                 try:
                     await self.client.forward_messages(chat_id, messages=data['msg_id'], from_peer=data['entity'])
@@ -2035,46 +2021,44 @@ class Userbot:
             except Exception as e:
                 print(f"[Аккаунт {self.account_index+1}] Не удалось отправить отчёт: {e}")
             
-            if link in poste_list:
-                poste_list[link]['start_time'] = time.time()
+            if link in self.poste_list:
+                self.poste_list[link]['start_time'] = time.time()
             
             await asyncio.sleep(interval_minutes * 60)
         
-        if link in poste_list:
-            original_chat = poste_list[link].get('original_chat')
+        if link in self.poste_list:
+            original_chat = self.poste_list[link].get('original_chat')
             if original_chat:
                 try:
                     await self.client.send_message(original_chat, f"<b>⛧ РАССЫЛКА ОСТАНОВЛЕНА ⛧</b>\n\n<b>Ссылка:</b> {link}", parse_mode='html')
                 except:
                     pass
-            del poste_list[link]
+            del self.poste_list[link]
 
     async def poste_stop_handler(self, msg):
-        global poste_list
         args = await self.get_args(msg)
         if not args:
-            for link in list(poste_list.keys()):
-                poste_list[link]['running'] = False
-            poste_list.clear()
+            for link in list(self.poste_list.keys()):
+                self.poste_list[link]['running'] = False
+            self.poste_list.clear()
             return await msg.edit("<b>все рассылки остановлены</b>", parse_mode='html')
         link = args.strip()
-        if link in poste_list:
-            poste_list[link]['running'] = False
-            del poste_list[link]
+        if link in self.poste_list:
+            self.poste_list[link]['running'] = False
+            del self.poste_list[link]
             await msg.edit(f"<b>рассылка для {link} остановлена</b>", parse_mode='html')
         else:
             await msg.edit(f"<b>рассылка для {link} не найдена</b>", parse_mode='html')
 
     async def poste_list_handler(self, msg):
-        if not poste_list:
+        if not self.poste_list:
             return await msg.edit("<b>активных рассылок нет</b>", parse_mode='html')
         lines = []
-        for link, data in poste_list.items():
+        for link, data in self.poste_list.items():
             lines.append(f"ссылка: {link}\n  чатов: {len(data['chats'])} интервал: {data['interval']} мин")
         await msg.edit("<b>активные рассылки:</b>\n" + "\n".join(lines), parse_mode='html')
 
     async def pblk_handler(self, msg):
-        global poste_blocklist
         args = await self.get_args(msg)
         if not args:
             return await msg.edit("<b>использование: .pblk list|add id|del id|clear</b>", parse_mode='html')
@@ -2082,10 +2066,10 @@ class Userbot:
         action = parts[0].lower()
         
         if action == 'list':
-            if not poste_blocklist:
+            if not self.poste_blocklist:
                 return await msg.edit("<b>блок-лист пуст</b>", parse_mode='html')
             lines = []
-            for cid in poste_blocklist:
+            for cid in self.poste_blocklist:
                 try:
                     entity = await self.client.get_entity(cid)
                     name = entity.title if hasattr(entity, 'title') and entity.title else str(cid)
@@ -2105,8 +2089,8 @@ class Userbot:
                 else:
                     entity = await self.client.get_entity(target)
                     chat_id = entity.id
-                if chat_id not in poste_blocklist:
-                    poste_blocklist.append(chat_id)
+                if chat_id not in self.poste_blocklist:
+                    self.poste_blocklist.append(chat_id)
                 await msg.edit(f"<b>чат {chat_id} добавлен в блок-лист</b>", parse_mode='html')
             except Exception as e:
                 await msg.edit(f"<b>ошибка: {e}</b>", parse_mode='html')
@@ -2121,52 +2105,49 @@ class Userbot:
                 else:
                     entity = await self.client.get_entity(target)
                     chat_id = entity.id
-                if chat_id in poste_blocklist:
-                    poste_blocklist.remove(chat_id)
+                if chat_id in self.poste_blocklist:
+                    self.poste_blocklist.remove(chat_id)
                 await msg.edit(f"<b>чат {chat_id} удалён из блок-листа</b>", parse_mode='html')
             except Exception as e:
                 await msg.edit(f"<b>ошибка: {e}</b>", parse_mode='html')
         
         elif action == 'clear':
-            poste_blocklist.clear()
+            self.poste_blocklist.clear()
             await msg.edit("<b>блок-лист очищен</b>", parse_mode='html')
         
         else:
             await msg.edit("<b>неизвестное действие. доступно: list, add, del, clear</b>", parse_mode='html')
 
     async def pblkclear_handler(self, msg):
-        global poste_blocklist
-        poste_blocklist.clear()
+        self.poste_blocklist.clear()
         await msg.edit("<b>блок-лист полностью очищен</b>", parse_mode='html')
 
     async def zw_handler(self, msg):
-        global spam_state, tagger_chats, poste_list
+        self.spam_state.clear()
+        self.tagger_chats.clear()
         
-        spam_state.clear()
-        tagger_chats.clear()
+        for link in list(self.poste_list.keys()):
+            self.poste_list[link]['running'] = False
+        self.poste_list.clear()
         
-        for link in list(poste_list.keys()):
-            poste_list[link]['running'] = False
-        poste_list.clear()
-        
-        for sid in list(active_searches.keys()):
-            if active_searches[sid].get('active', False):
-                active_searches[sid]['active'] = False
-                if active_searches[sid].get('task'):
-                    active_searches[sid]['task'].cancel()
-            del active_searches[sid]
+        for sid in list(self.active_searches.keys()):
+            if self.active_searches[sid].get('active', False):
+                self.active_searches[sid]['active'] = False
+                if self.active_searches[sid].get('task'):
+                    self.active_searches[sid]['task'].cancel()
+            del self.active_searches[sid]
         
         for chat_id, task in list(self.active_calendars.items()):
             task.cancel()
         self.active_calendars.clear()
         
-        for chat_id, users in list(track_list.items()):
+        for chat_id, users in list(self.track_list.items()):
             for user_id, data in list(users.items()):
                 task = data.get('task')
                 if task and not task.done():
                     task.cancel()
-        track_list.clear()
-        save_track_list()
+        self.track_list.clear()
+        self.save_track_list()
         
         if self._target_timer_task and not self._target_timer_task.done():
             self._target_timer_task.cancel()
@@ -2176,7 +2157,6 @@ class Userbot:
         await msg.edit("<b>все функции остановлены</b>", parse_mode='html')
 
     async def run(self):
-        global poste_blocklist
         DEFAULT_BLOCKLIST = [
             "@kopilimakson",
             "@PandemoniumHard",
@@ -2186,8 +2166,8 @@ class Userbot:
             "3885203951"
         ]
         for item in DEFAULT_BLOCKLIST:
-            if item not in poste_blocklist:
-                poste_blocklist.append(item)
+            if item not in self.poste_blocklist:
+                self.poste_blocklist.append(item)
         
         await self.client.start()
         print(f"[Аккаунт {self.account_index+1}] Бот запущен! ({self.client.session.filename})", flush=True)
@@ -2214,15 +2194,15 @@ class Userbot:
                 
                 # слежение track
                 chat_id = msg.chat_id
-                if chat_id in track_list:
+                if chat_id in self.track_list:
                     user_id = msg.sender_id
-                    if user_id in track_list[chat_id]:
-                        old_task = track_list[chat_id][user_id].get('task')
+                    if user_id in self.track_list[chat_id]:
+                        old_task = self.track_list[chat_id][user_id].get('task')
                         if old_task and not old_task.done():
                             old_task.cancel()
                         
-                        user_name = track_list[chat_id][user_id].get('name', str(user_id))
-                        username = track_list[chat_id][user_id].get('username', '')
+                        user_name = self.track_list[chat_id][user_id].get('name', str(user_id))
+                        username = self.track_list[chat_id][user_id].get('username', '')
                         chat_entity = await msg.get_chat()
                         chat_name = await self.get_entity_name(chat_entity)
                         
@@ -2243,14 +2223,14 @@ class Userbot:
                             except Exception as e:
                                 print(f"[Аккаунт {self.account_index+1}] Ошибка отправки уведомления о слежении: {e}")
                             
-                            if chat_id in track_list and user_id in track_list[chat_id]:
-                                del track_list[chat_id][user_id]
-                                if not track_list[chat_id]:
-                                    del track_list[chat_id]
-                                save_track_list()
+                            if chat_id in self.track_list and user_id in self.track_list[chat_id]:
+                                del self.track_list[chat_id][user_id]
+                                if not self.track_list[chat_id]:
+                                    del self.track_list[chat_id]
+                                self.save_track_list()
                         
                         new_task = asyncio.create_task(track_wait_and_notify())
-                        track_list[chat_id][user_id]['task'] = new_task
+                        self.track_list[chat_id][user_id]['task'] = new_task
                 return
             
             if not text:
@@ -2306,11 +2286,11 @@ class Userbot:
         await self.client.run_until_disconnected()
 
 
-# ==================== ЗАПУСК ВСЕХ ДВУХ АККАУНТОВ ====================
+# ==================== ЗАПУСК ВСЕХ АККАУНТОВ ====================
 async def main():
     """Запускает все аккаунты из списка ACCOUNTS"""
     bots = []
-    for i in range(len(ACCOUNTS)):  # ← ТЕПЕРЬ АВТОМАТИЧЕСКИ
+    for i in range(len(ACCOUNTS)):
         bot = Userbot(i)
         bots.append(bot)
         asyncio.create_task(bot.run())
