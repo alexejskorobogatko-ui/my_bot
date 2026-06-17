@@ -34,10 +34,19 @@ def run_web():
     port = int(os.environ.get("PORT", 8080))
     web_app.run(host="0.0.0.0", port=port)
 
-# ==================== ДАННЫЕ ДЛЯ АККАУНТА ====================
-SESSION_NAME = 'session2'
-API_ID = 30843796
-API_HASH = '535bed75aaa17ed391bc11e1dac2cb21'
+# ==================== ДАННЫЕ ДЛЯ АККАУНТОВ (3 штуки) ====================
+ACCOUNTS = [
+    {
+        'session': 'session1',
+        'api_id': 30843796,
+        'api_hash': '535bed75aaa17ed391bc11e1dac2cb21'
+    },
+    {
+        'session': 'session2',
+        'api_id': 30843796,
+        'api_hash': '535bed75aaa17ed391bc11e1dac2cb21'
+    }
+]
 
 # ==================== ПУТИ ДЛЯ ФАЙЛОВ ====================
 TEMPLATES_DIR = "templates"
@@ -67,7 +76,7 @@ if not os.path.exists(default_template_path):
     with open(default_template_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(DEFAULT_SHABLON))
 
-# ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
+# ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (общие для всех аккаунтов) ====================
 spam_state = {}
 start_time = time.time()
 tagger_chats = {}
@@ -383,10 +392,16 @@ commands_text = """
 ⛧ Владелец: @misosphere
 """
 
-# ==================== КЛАСС ЮЗЕРБОТА ====================
+# ==================== КЛАСС ЮЗЕРБОТА (ОДИН ЭКЗЕМПЛЯР) ====================
 class Userbot:
-    def __init__(self):
-        self.client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+    def __init__(self, account_index):
+        self.account_index = account_index
+        self.config = ACCOUNTS[account_index]
+        self.client = TelegramClient(
+            self.config['session'],
+            self.config['api_id'],
+            self.config['api_hash']
+        )
         self.target_user = None
         self._target_timer_task = None
         self.target_chat_id_for_timer = None
@@ -440,7 +455,7 @@ class Userbot:
                     chat_id = updates.chats[0].id
                     return chat_id
             except Exception as e:
-                print(f"Ошибка вступления по ссылке: {e}")
+                print(f"[Аккаунт {self.account_index+1}] Ошибка вступления по ссылке: {e}")
         
         if chat_ref.lstrip('-').isdigit():
             try:
@@ -496,7 +511,7 @@ class Userbot:
                         f.write(response.content)
                     return temp_path
             except Exception as e:
-                print(f"Ошибка скачивания по ссылке: {e}")
+                print(f"[Аккаунт {self.account_index+1}] Ошибка скачивания по ссылке: {e}")
         return None
 
     # ========== АВТООТВЕТЧИК ==========
@@ -506,7 +521,6 @@ class Userbot:
         if not msg.out:
             user_id = msg.sender_id
             
-            # АВТООТВЕТЧИК С АНТИСПАМ-ЗАЩИТОЙ
             if user_id in autoreply_list:
                 current_time = time.time()
                 
@@ -541,6 +555,7 @@ class Userbot:
                     text = autoreply_shpk.get(user_id, '') + " " + choice(current_shablon) if autoreply_shpk.get(user_id) else choice(current_shablon)
                     await msg.reply(text, file=autoreply_photo.get(user_id), parse_mode='html')
 
+    # ========== АВТООТВЕТЧИК КОМАНДЫ ==========
     async def autoreply_handler(self, msg):
         global autoreply_photo, autoreply_list, autoreply_time, autoreply_shpk, autoreply_spam_tracker
         args = msg.text.split()
@@ -705,7 +720,7 @@ class Userbot:
                 else:
                     await msg.respond(send_text, reply_to=reply.id if reply else None)
             except Exception as e:
-                print(f"Спам ошибка: {e}")
+                print(f"[Аккаунт {self.account_index+1}] Спам ошибка: {e}")
             await asyncio.sleep(time_val)
         
         if chat_id in spam_state:
@@ -717,7 +732,7 @@ class Userbot:
             except:
                 pass
 
-    # ========== ТЕГГЕР (ИСПРАВЛЕННЫЙ) ==========
+    # ========== ТЕГГЕР ==========
     async def tagger_handler(self, msg):
         args = await self.get_args(msg)
         if not args:
@@ -756,7 +771,6 @@ class Userbot:
             else:
                 base_text = random_phrase
             
-            # ВЕСЬ текст обёрнут в ссылку
             text = f"<a href='tg://user?id={user_id}'>{base_text}</a>"
             
             try:
@@ -765,7 +779,7 @@ class Userbot:
                 else:
                     await self.client.send_message(chat_id, text, parse_mode='html')
             except Exception as e:
-                print(f"Теггер ошибка: {e}")
+                print(f"[Аккаунт {self.account_index+1}] Теггер ошибка: {e}")
             await asyncio.sleep(time_val)
         
         if chat_id in tagger_chats:
@@ -777,7 +791,7 @@ class Userbot:
             except:
                 pass
 
-    # ========== СТАТУС (ДЕТАЛЬНЫЙ) ==========
+    # ========== СТАТУС ==========
     async def status_handler(self, msg):
         global status_media
         if len(msg.text.split()) > 1:
@@ -787,7 +801,6 @@ class Userbot:
         me = await self.client.get_me()
         target_info = self.target_user if self.target_user else "не установлена"
         
-        # СПАМ (avt)
         spam_text = f"{len(spam_state)} активных"
         if spam_state:
             spam_text += "\n"
@@ -801,7 +814,6 @@ class Userbot:
         else:
             spam_text += "\n  • нет"
         
-        # ТЕГГЕР
         tagger_text = f"{len(tagger_chats)} активных"
         if tagger_chats:
             tagger_text += "\n"
@@ -815,7 +827,6 @@ class Userbot:
         else:
             tagger_text += "\n  • нет"
         
-        # АВТООТВЕТЧИК
         aa_text = f"{len(autoreply_list)} активных"
         if autoreply_list:
             aa_text += "\n"
@@ -831,16 +842,10 @@ class Userbot:
         else:
             aa_text += "\n  • нет"
         
-        # РАССЫЛКИ
         poste_text = f"{len(poste_list)} активных" if poste_list else "нет"
-        
-        # БЛОК-ЛИСТ
         blocklist_text = f"{len(poste_blocklist)} чатов" if poste_blocklist else "нет"
-        
-        # ПОИСКИ
         detect_text = f"{len(active_searches)} активных" if active_searches else "нет"
         
-        # СЛЕЖЕНИЯ
         track_text = ""
         if track_list:
             total = sum(len(users) for users in track_list.values())
@@ -859,11 +864,10 @@ class Userbot:
         else:
             track_text = "нет"
         
-        # ШАБЛОН
         template_text = f"{current_template_name} ({len(current_shablon)} фраз)" if current_shablon else "не загружен"
         
         status_text = f"""
-<b>⛧ СТАТУС РАБОТЫ ФУНКЦИЙ ⛧</b>
+<b>⛧ СТАТУС РАБОТЫ ФУНКЦИЙ (АККАУНТ {self.account_index+1}) ⛧</b>
 
 <b>⛧ СПАМ (avt):</b> {spam_text}
 
@@ -890,7 +894,7 @@ class Userbot:
 """
         await self.reply_with_media(msg, status_media, status_text)
 
-    # ========== ОСТАЛЬНЫЕ КОМАНДЫ (БЕЗ ИЗМЕНЕНИЙ) ==========
+    # ========== ОСТАЛЬНЫЕ КОМАНДЫ ==========
     async def kalendar_handler(self, msg):
         args = await self.get_args(msg)
         if not args:
@@ -944,7 +948,7 @@ class Userbot:
                         await msg.respond(send_text, schedule=schedule_date.timestamp())
                     messages_sent += 1
                 except Exception as e:
-                    print(f"Календарь ошибка: {e}")
+                    print(f"[Аккаунт {self.account_index+1}] Календарь ошибка: {e}")
                 await asyncio.sleep(0.5)
             
             elapsed = int(time.time() - start_time)
@@ -1394,7 +1398,7 @@ class Userbot:
                     await message.delete()
                     await asyncio.sleep(0.5)
             except Exception as e:
-                print(f"Autodel ошибка: {e}")
+                print(f"[Аккаунт {self.account_index+1}] Autodel ошибка: {e}")
             finally:
                 if chat_id in autodel_tasks:
                     del autodel_tasks[chat_id]
@@ -1516,7 +1520,7 @@ class Userbot:
                     if i < 2:
                         await asyncio.sleep(3)
             except Exception as e:
-                print(f"Ошибка отправки уведомления о слежении: {e}")
+                print(f"[Аккаунт {self.account_index+1}] Ошибка отправки уведомления о слежении: {e}")
             
             if chat_id in track_list and user_id in track_list[chat_id]:
                 del track_list[chat_id][user_id]
@@ -1662,7 +1666,7 @@ class Userbot:
                             
                             await asyncio.sleep(0.1)
                     except Exception as e:
-                        print(f"Ошибка при поиске в чате {dialog.id}: {e}")
+                        print(f"[Аккаунт {self.account_index+1}] Ошибка при поиске в чате {dialog.id}: {e}")
                     
                     if len(results) >= 15:
                         break
@@ -1686,7 +1690,7 @@ class Userbot:
                 try:
                     await msg.edit(report, parse_mode='html')
                 except Exception as e:
-                    print(f"Ошибка отправки отчёта: {e}")
+                    print(f"[Аккаунт {self.account_index+1}] Ошибка отправки отчёта: {e}")
                 
                 if search_id in active_searches:
                     del active_searches[search_id]
@@ -1759,8 +1763,10 @@ class Userbot:
             try:
                 await self.client.send_file(msg.chat_id, mh, caption=caption, parse_mode='html')
                 await msg.delete()
-            except: await msg.edit(caption, parse_mode='html')
-        else: await msg.edit(caption, parse_mode='html')
+            except:
+                await msg.edit(caption, parse_mode='html')
+        else:
+            await msg.edit(caption, parse_mode='html')
 
     async def menu_handler(self, msg):
         global mm
@@ -1771,8 +1777,10 @@ class Userbot:
             try:
                 await self.client.send_file(msg.chat_id, mm, caption=menu, parse_mode='html')
                 await msg.delete()
-            except: await msg.edit(menu, parse_mode='html')
-        else: await msg.edit(menu, parse_mode='html')
+            except:
+                await msg.edit(menu, parse_mode='html')
+        else:
+            await msg.edit(menu, parse_mode='html')
 
     async def more_handler(self, msg):
         global more_media
@@ -1783,8 +1791,10 @@ class Userbot:
             try:
                 await self.client.send_file(msg.chat_id, more_media, caption=more_text, parse_mode='html')
                 await msg.delete()
-            except: await msg.edit(more_text, parse_mode='html')
-        else: await msg.edit(more_text, parse_mode='html')
+            except:
+                await msg.edit(more_text, parse_mode='html')
+        else:
+            await msg.edit(more_text, parse_mode='html')
 
     async def custom_handler(self, msg):
         global custom_media
@@ -1795,8 +1805,10 @@ class Userbot:
             try:
                 await self.client.send_file(msg.chat_id, custom_media, caption=custom_text, parse_mode='html')
                 await msg.delete()
-            except: await msg.edit(custom_text, parse_mode='html')
-        else: await msg.edit(custom_text, parse_mode='html')
+            except:
+                await msg.edit(custom_text, parse_mode='html')
+        else:
+            await msg.edit(custom_text, parse_mode='html')
 
     async def rasset_handler(self, msg):
         global rasset_media
@@ -1807,8 +1819,10 @@ class Userbot:
             try:
                 await self.client.send_file(msg.chat_id, rasset_media, caption=rasset_text, parse_mode='html')
                 await msg.delete()
-            except: await msg.edit(rasset_text, parse_mode='html')
-        else: await msg.edit(rasset_text, parse_mode='html')
+            except:
+                await msg.edit(rasset_text, parse_mode='html')
+        else:
+            await msg.edit(rasset_text, parse_mode='html')
 
     async def times_handler(self, msg):
         global times_media
@@ -1819,16 +1833,20 @@ class Userbot:
             try:
                 await self.client.send_file(msg.chat_id, times_media, caption=times_text, parse_mode='html')
                 await msg.delete()
-            except: await msg.edit(times_text, parse_mode='html')
-        else: await msg.edit(times_text, parse_mode='html')
+            except:
+                await msg.edit(times_text, parse_mode='html')
+        else:
+            await msg.edit(times_text, parse_mode='html')
 
     async def files_handler(self, msg):
         if mm:
             try:
                 await self.client.send_file(msg.chat_id, mm, caption=files_text, parse_mode='html')
                 await msg.delete()
-            except: await msg.edit(files_text, parse_mode='html')
-        else: await msg.edit(files_text, parse_mode='html')
+            except:
+                await msg.edit(files_text, parse_mode='html')
+        else:
+            await msg.edit(files_text, parse_mode='html')
 
     async def cmd_handler(self, msg):
         global cmds
@@ -1839,8 +1857,10 @@ class Userbot:
             try:
                 await self.client.send_file(msg.chat_id, cmds, caption=commands_text, parse_mode='html')
                 await msg.delete()
-            except: await msg.edit(commands_text, parse_mode='html')
-        else: await msg.edit(commands_text, parse_mode='html')
+            except:
+                await msg.edit(commands_text, parse_mode='html')
+        else:
+            await msg.edit(commands_text, parse_mode='html')
 
     async def x0_handler(self, msg):
         if not msg.is_reply:
@@ -1986,7 +2006,7 @@ class Userbot:
                             log_msg = f"<b>⛧ ОШИБКА РАССЫЛКИ ⛧</b>\n\n<b>Пост:</b> {link}\n<b>Чат:</b> {chat_name} ({chat_id})\n<b>Ошибка:</b> {error_text}"
                             await self.client.send_message(int(log_chat_id), log_msg, parse_mode='html')
                         except Exception as log_err:
-                            print(f"Не удалось отправить лог: {log_err}")
+                            print(f"[Аккаунт {self.account_index+1}] Не удалось отправить лог: {log_err}")
                 except FloodWaitError as e:
                     await asyncio.sleep(e.seconds)
                     try:
@@ -2013,7 +2033,7 @@ class Userbot:
             try:
                 await self.client.send_message(original_chat, report, parse_mode='html')
             except Exception as e:
-                print(f"Не удалось отправить отчёт: {e}")
+                print(f"[Аккаунт {self.account_index+1}] Не удалось отправить отчёт: {e}")
             
             if link in poste_list:
                 poste_list[link]['start_time'] = time.time()
@@ -2042,11 +2062,11 @@ class Userbot:
             poste_list[link]['running'] = False
             del poste_list[link]
             await msg.edit(f"<b>рассылка для {link} остановлена</b>", parse_mode='html')
-        else: 
+        else:
             await msg.edit(f"<b>рассылка для {link} не найдена</b>", parse_mode='html')
 
     async def poste_list_handler(self, msg):
-        if not poste_list: 
+        if not poste_list:
             return await msg.edit("<b>активных рассылок нет</b>", parse_mode='html')
         lines = []
         for link, data in poste_list.items():
@@ -2056,7 +2076,7 @@ class Userbot:
     async def pblk_handler(self, msg):
         global poste_blocklist
         args = await self.get_args(msg)
-        if not args: 
+        if not args:
             return await msg.edit("<b>использование: .pblk list|add id|del id|clear</b>", parse_mode='html')
         parts = args.split()
         action = parts[0].lower()
@@ -2170,10 +2190,10 @@ class Userbot:
                 poste_blocklist.append(item)
         
         await self.client.start()
-        print(f"Бот запущен! ({self.client.session.filename})", flush=True)
+        print(f"[Аккаунт {self.account_index+1}] Бот запущен! ({self.client.session.filename})", flush=True)
         me = await self.client.get_me()
-        print(f"Имя: {me.first_name} (@{me.username})", flush=True)
-        print("Команды загружены. Ожидание сообщений...", flush=True)
+        print(f"[Аккаунт {self.account_index+1}] Имя: {me.first_name} (@{me.username})", flush=True)
+        print(f"[Аккаунт {self.account_index+1}] Команды загружены. Ожидание сообщений...", flush=True)
 
         @self.client.on(events.NewMessage)
         async def handler(event):
@@ -2221,7 +2241,7 @@ class Userbot:
                                     if i < 2:
                                         await asyncio.sleep(3)
                             except Exception as e:
-                                print(f"Ошибка отправки уведомления о слежении: {e}")
+                                print(f"[Аккаунт {self.account_index+1}] Ошибка отправки уведомления о слежении: {e}")
                             
                             if chat_id in track_list and user_id in track_list[chat_id]:
                                 del track_list[chat_id][user_id]
@@ -2236,7 +2256,7 @@ class Userbot:
             if not text:
                 return
             
-            print(f"[DEBUG] Команда: {text[:100]}", flush=True)
+            print(f"[Аккаунт {self.account_index+1}] Команда: {text[:100]}", flush=True)
             
             if text.startswith('.avt'): await self.renewal_handler(msg)
             elif text.startswith('.clr'): await self.kalendar_handler(msg)
@@ -2281,11 +2301,24 @@ class Userbot:
             elif text.startswith('.zw'): await self.zw_handler(msg)
             elif text.startswith('.aa'): await self.autoreply_handler(msg)
             else:
-                print(f"[DEBUG] Неизвестная команда: {text[:50]}", flush=True)
+                print(f"[Аккаунт {self.account_index+1}] Неизвестная команда: {text[:50]}", flush=True)
 
         await self.client.run_until_disconnected()
 
-# ==================== ЗАПУСК ====================
+
+# ==================== ЗАПУСК ВСЕХ ТРЁХ АККАУНТОВ ====================
+async def main():
+    """Запускает все 3 аккаунта одновременно"""
+    bots = []
+    for i in range(3):
+        bot = Userbot(i)
+        bots.append(bot)
+        asyncio.create_task(bot.run())
+    
+    # Ждём вечно
+    await asyncio.Event().wait()
+
+
 if __name__ == "__main__":
     more_media = None
     custom_media = None
@@ -2293,5 +2326,4 @@ if __name__ == "__main__":
     times_media = None
     
     threading.Thread(target=run_web, daemon=True).start()
-    bot = Userbot()
-    asyncio.run(bot.run())
+    asyncio.run(main())
