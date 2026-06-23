@@ -226,19 +226,23 @@ more_text = """
 <b><code>.shb del [название]</code></b> — <b>удалить шаблон</b>
 <b><code>.load + реплай на файл</code></b> — <b>загрузить шаблон из файла</b>
 <b><code>.file</code></b> — <b>выгрузить текущий шаблон</b>
+
 <b>⛧ Медиа</b>
 <b><code>.med save [номер] + реплай</code></b> — <b>сохранить медиа</b>
 <b><code>.med list</code></b> — <b>список медиа</b>
 <b><code>.med send [номер]</code></b> — <b>отправить медиа</b>
 <b><code>.med del [номер]</code></b> — <b>удалить медиа</b>
+
 <b>⛧ Слежение</b>
 <b><code>.track @username</code></b> — <b>включить слежение (1 час)</b>
 <b><code>.trackoff @username</code></b> — <b>выключить слежение</b>
 <b><code>.tracklist</code></b> — <b>список активных слежений</b>
+
 <b>⛧ Поиск по чатам</b>
 <b><code>.detect [текст]</code></b> — <b>поиск фразы</b>
 <b><code>.detectoff [номер]</code></b> — <b>остановить поиск</b>
 <b><code>.detectlist</code></b> — <b>список активных поисков</b>
+
 <b>⛧ Инструменты</b>
 <b><code>.log [ссылка/username/id]</code></b> — <b>установить лог-чат</b>
 <b><code>.scrape @username</code></b> — <b>выгрузить список участников</b>
