@@ -189,7 +189,6 @@ menutext = """
 <b><code>.status</code></b> — <b>статус функций</b>
 <b><code>.zw</code></b> — <b>остановить всё</b>
 <b><code>.reload</code></b> — <b>перезапустить бота</b>
-
 <b><code>.menu</code></b> — <b>спам и теггер</b>
 <b><code>.more</code></b> — <b>дополнительные функции</b>
 <b><code>.postecom</code></b> — <b>рассылка постов</b>
@@ -202,13 +201,10 @@ menu = """
 
 <b><code>.avt [время] [медиа] [текст] + реплай</code></b> — <b>спам в чат</b>
 <b><code>.stop [chat_id]</code></b> — <b>остановить спам</b>
-
 <b><code>.tagger [id] [время] [медиа] [текст] + реплай</code></b> — <b>теггер</b>
 <b><code>.off [chat_id]</code></b> — <b>остановить теггер</b>
-
 <b><code>.clr [время] [медиа] [текст] + реплай</code></b> — <b>календарь</b>
 <b><code>.clroff</code></b> — <b>остановить календарь</b>
-
 <b><code>.reply @username</code></b> — <b>включить автоответчик</b>
 <b><code>.reply + реплай</code></b> — <b>включить по реплаю</b>
 <b><code>.creply @username</code></b> — <b>выключить автоответчик</b>
@@ -230,23 +226,19 @@ more_text = """
 <b><code>.shb del [название]</code></b> — <b>удалить шаблон</b>
 <b><code>.load + реплай на файл</code></b> — <b>загрузить шаблон из файла</b>
 <b><code>.file</code></b> — <b>выгрузить текущий шаблон</b>
-
 <b>⛧ Медиа</b>
 <b><code>.med save [номер] + реплай</code></b> — <b>сохранить медиа</b>
 <b><code>.med list</code></b> — <b>список медиа</b>
 <b><code>.med send [номер]</code></b> — <b>отправить медиа</b>
 <b><code>.med del [номер]</code></b> — <b>удалить медиа</b>
-
 <b>⛧ Слежение</b>
 <b><code>.track @username</code></b> — <b>включить слежение (1 час)</b>
 <b><code>.trackoff @username</code></b> — <b>выключить слежение</b>
 <b><code>.tracklist</code></b> — <b>список активных слежений</b>
-
 <b>⛧ Поиск по чатам</b>
 <b><code>.detect [текст]</code></b> — <b>поиск фразы</b>
 <b><code>.detectoff [номер]</code></b> — <b>остановить поиск</b>
 <b><code>.detectlist</code></b> — <b>список активных поисков</b>
-
 <b>⛧ Инструменты</b>
 <b><code>.log [ссылка/username/id]</code></b> — <b>установить лог-чат</b>
 <b><code>.scrape @username</code></b> — <b>выгрузить список участников</b>
@@ -968,7 +960,7 @@ class Userbot:
             self.active_calendars[chat_id].cancel()
         
         async def calendar_task():
-            start_time = time.time()
+            start_time_local = time.time()
             messages_sent = 0
             total_messages = 100
             
@@ -992,7 +984,7 @@ class Userbot:
                     print(f"[Аккаунт {self.account_index+1}] Календарь ошибка: {e}")
                 await asyncio.sleep(0.5)
             
-            elapsed = int(time.time() - start_time)
+            elapsed = int(time.time() - start_time_local)
             elapsed_str = str(timedelta(seconds=elapsed))
             report = f"<b>⛧ КАЛЕНДАРЬ ЗАВЕРШЁН ⛧</b>\n\n<b>Всего сообщений:</b> {messages_sent}\n<b>Время работы:</b> {elapsed_str}\n<b>Интервал:</b> {time_val} мин"
             await msg.respond(report, parse_mode='html')
@@ -1772,7 +1764,6 @@ class Userbot:
     # ========== МЕНЮ-ХЕНДЛЕРЫ ==========
     async def help_handler(self, msg):
         global mh
-        me = await self.client.get_me()
         if len(msg.text.split()) > 1:
             mh = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
             return await msg.edit("<b>медиа для .help установлено</b>", parse_mode='html')
@@ -2309,9 +2300,13 @@ async def main():
         bots.append(bot)
         asyncio.create_task(bot.run())
     
-    await asyncio.Event().wait()
+    # Keep the main loop running
+    while True:
+        await asyncio.sleep(1)
 
 
 if __name__ == "__main__":
+    # Запуск веб-сервера для Render в отдельном потоке
     threading.Thread(target=run_web, daemon=True).start()
+    # Запуск основного цикла
     asyncio.run(main())
