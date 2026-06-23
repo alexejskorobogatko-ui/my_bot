@@ -7,6 +7,7 @@ import threading
 import glob
 import re
 import json
+import subprocess
 from random import choice
 from datetime import datetime, timedelta
 
@@ -51,10 +52,12 @@ ACCOUNTS = [
 # ==================== ПУТИ ДЛЯ ФАЙЛОВ ====================
 TEMPLATES_DIR = "templates"
 MEDIA_DIR = "media"
+DATA_DIR = "data"
 LOG_CHAT_FILE = "log_chat.txt"
 
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 os.makedirs(MEDIA_DIR, exist_ok=True)
+os.makedirs(DATA_DIR, exist_ok=True)
 
 # ==================== ШАБЛОНЫ ПО УМОЛЧАНИЮ ====================
 DEFAULT_SHABLON = [
@@ -75,7 +78,7 @@ if not os.path.exists(default_template_path):
     with open(default_template_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(DEFAULT_SHABLON))
 
-# ========== ОБЩИЕ ДЛЯ ВСЕХ АККАУНТОВ (НЕ ЗАВИСЯТ ОТ АККАУНТА) ==========
+# ========== ОБЩИЕ ДЛЯ ВСЕХ АККАУНТОВ ==========
 start_time = time.time()
 mid = 'https://x0.at/cUQa.jpg'
 name = "Ralvatron"
@@ -143,7 +146,7 @@ def get_all_templates():
 
 load_template("main")
 
-# ========== МЕДИА ХРАНИЛИЩЕ (ОБЩЕЕ) ==========
+# ========== МЕДИА ХРАНИЛИЩЕ ==========
 def get_media_path(media_id):
     pattern = os.path.join(MEDIA_DIR, f"{media_id}.*")
     files = glob.glob(pattern)
@@ -322,6 +325,7 @@ commands_text = """
 ⛧ Системные ⛧
 <b><code>.status</code></b> — статус работы функций
 <b><code>.zw</code></b> — остановить все функции
+<b><code>.reload</code></b> — перезапуск бота с сохранением состояния
 
 ⛧ Медиа хранилище ⛧
 <b><code>.med save [номер]</code></b> + реплай — сохранить медиа
@@ -338,7 +342,7 @@ commands_text = """
 ⛧ Владелец: @misosphere
 """
 
-# ==================== КЛАСС ЮЗЕРБОТА (ВСЕ ПЕРЕМЕННЫЕ ВНУТРИ) ====================
+# ==================== КЛАСС ЮЗЕРБОТА ====================
 class Userbot:
     def __init__(self, account_index):
         self.account_index = account_index
@@ -349,7 +353,7 @@ class Userbot:
             self.config['api_hash']
         )
         
-        # ===== КАЖДЫЙ АККАУНТ ИМЕЕТ СВОИ ПЕРЕМЕННЫЕ =====
+        # ===== ПЕРЕМЕННЫЕ =====
         self.spam_state = {}
         self.tagger_chats = {}
         self.autodel_tasks = {}
@@ -358,51 +362,134 @@ class Userbot:
         self.target_chat_id_for_timer = None
         self.active_calendars = {}
         
-        # Автоответчик (свой для каждого аккаунта)
         self.autoreply_list = []
         self.autoreply_time = {}
         self.autoreply_photo = {}
         self.autoreply_shpk = {}
         self.autoreply_spam_tracker = {}
         
-        # Поиски и слежения (свои для каждого аккаунта)
         self.active_searches = {}
         self.track_list = {}
-        self.track_file = f"track_list_{account_index+1}.json"
         
-        # Постинг (свой для каждого аккаунта)
         self.poste_list = {}
         self.poste_blocklist = []
         
-        # Загружаем трек-лист для этого аккаунта
-        self.load_track_list()
+        # ===== ФАЙЛЫ ДЛЯ СОХРАНЕНИЯ =====
+        acc = account_index + 1
+        self.blocklist_file = os.path.join(DATA_DIR, f"poste_blocklist_{acc}.json")
+        self.poste_file = os.path.join(DATA_DIR, f"poste_list_{acc}.json")
+        self.track_file = os.path.join(DATA_DIR, f"track_list_{acc}.json")
+        self.autoreply_file = os.path.join(DATA_DIR, f"autoreply_{acc}.json")
+        self.autoreply_time_file = os.path.join(DATA_DIR, f"autoreply_time_{acc}.json")
+        self.autoreply_photo_file = os.path.join(DATA_DIR, f"autoreply_photo_{acc}.json")
+        self.autoreply_shpk_file = os.path.join(DATA_DIR, f"autoreply_shpk_{acc}.json")
+        self.autoreply_tracker_file = os.path.join(DATA_DIR, f"autoreply_tracker_{acc}.json")
+        self.spam_file = os.path.join(DATA_DIR, f"spam_state_{acc}.json")
+        self.tagger_file = os.path.join(DATA_DIR, f"tagger_chats_{acc}.json")
+        
+        # ===== ЗАГРУЗКА СОСТОЯНИЙ =====
+        self.poste_blocklist = self.load_json(self.blocklist_file, [])
+        self.poste_list = self.load_json(self.poste_file, {})
+        self.track_list = self.load_json(self.track_file, {})
+        self.autoreply_list = self.load_json(self.autoreply_file, [])
+        self.autoreply_time = self.load_json(self.autoreply_time_file, {})
+        self.autoreply_photo = self.load_json(self.autoreply_photo_file, {})
+        self.autoreply_shpk = self.load_json(self.autoreply_shpk_file, {})
+        self.autoreply_spam_tracker = self.load_json(self.autoreply_tracker_file, {})
+        self.spam_state = self.load_json(self.spam_file, {})
+        self.tagger_chats = self.load_json(self.tagger_file, {})
 
-    def load_track_list(self):
-        if os.path.exists(self.track_file):
+    def load_json(self, path, default):
+        if os.path.exists(path):
             try:
-                with open(self.track_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    self.track_list = {}
-                    for chat_id_str, users in data.items():
-                        chat_id = int(chat_id_str)
-                        self.track_list[chat_id] = {}
-                        for user_id_str, info in users.items():
-                            self.track_list[chat_id][int(user_id_str)] = info
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
             except:
-                pass
+                return default
+        return default
+
+    def save_json(self, path, data):
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except:
+            pass
+
+    def save_all_state(self):
+        """Сохраняет все состояния"""
+        self.save_json(self.blocklist_file, self.poste_blocklist)
+        self.save_json(self.poste_file, self.poste_list)
+        self.save_json(self.track_file, self.track_list)
+        self.save_json(self.autoreply_file, self.autoreply_list)
+        self.save_json(self.autoreply_time_file, self.autoreply_time)
+        self.save_json(self.autoreply_photo_file, self.autoreply_photo)
+        self.save_json(self.autoreply_shpk_file, self.autoreply_shpk)
+        self.save_json(self.autoreply_tracker_file, self.autoreply_spam_tracker)
+        self.save_json(self.spam_file, self.spam_state)
+        self.save_json(self.tagger_file, self.tagger_chats)
 
     def save_track_list(self):
-        save_data = {}
-        for chat_id, users in self.track_list.items():
-            save_data[str(chat_id)] = {}
-            for user_id, info in users.items():
-                save_data[str(chat_id)][str(user_id)] = {
-                    'name': info.get('name', ''),
-                    'username': info.get('username', ''),
-                    'chat_name': info.get('chat_name', '')
-                }
-        with open(self.track_file, 'w', encoding='utf-8') as f:
-            json.dump(save_data, f, ensure_ascii=False, indent=2)
+        self.save_json(self.track_file, self.track_list)
+
+    # ========== ВОССТАНОВЛЕНИЕ АКТИВНЫХ ЗАДАЧ ==========
+    async def restore_spam(self, chat_id):
+        """Восстанавливает спам-цикл после перезапуска"""
+        if not self.spam_state.get(chat_id):
+            return
+        
+        while self.spam_state.get(chat_id):
+            try:
+                random_phrase = choice(current_shablon) if current_shablon else ""
+                await self.client.send_message(chat_id, random_phrase)
+            except Exception as e:
+                print(f"[Аккаунт {self.account_index+1}] Ошибка восстановления спама в {chat_id}: {e}")
+                break
+            await asyncio.sleep(5)
+
+    async def restore_tagger(self, chat_id):
+        """Восстанавливает теггер-цикл после перезапуска"""
+        if not self.tagger_chats.get(chat_id):
+            return
+        
+        while self.tagger_chats.get(chat_id):
+            try:
+                random_phrase = choice(current_shablon) if current_shablon else ""
+                await self.client.send_message(chat_id, random_phrase)
+            except Exception as e:
+                print(f"[Аккаунт {self.account_index+1}] Ошибка восстановления теггера в {chat_id}: {e}")
+                break
+            await asyncio.sleep(5)
+
+    # ========== КОМАНДА .reload ==========
+    async def reload_handler(self, msg):
+        """Перезапускает бота с сохранением состояния"""
+        await msg.edit("<b>⛧ ПЕРЕЗАПУСК ⛧</b>\n\nСохраняю состояние...", parse_mode='html')
+        
+        # Сохраняем всё состояние
+        self.save_all_state()
+        
+        await msg.edit("<b>⛧ ПЕРЕЗАПУСК ⛧</b>\n\nПодтягиваю изменения с GitHub...", parse_mode='html')
+        
+        # git pull
+        try:
+            result = subprocess.run(["git", "pull"], capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
+            
+            if "Already up to date" in result.stdout:
+                await msg.edit("<b>⛧ ПЕРЕЗАПУСК ⛧</b>\n\nКод актуален.\n\nПерезапускаюсь...", parse_mode='html')
+            else:
+                await msg.edit(
+                    f"<b>⛧ ОБНОВЛЕНИЕ ЗАГРУЖЕНО ⛧</b>\n\n"
+                    f"<code>{result.stdout[:300]}</code>\n\n"
+                    f"Перезапускаюсь...",
+                    parse_mode='html'
+                )
+        except Exception as e:
+            await msg.edit(f"<b>⛧ ОШИБКА GIT ⛧</b>\n\n{e}", parse_mode='html')
+            return
+        
+        # Перезапускаем процесс
+        await asyncio.sleep(1)
+        os.execv(sys.executable, [sys.executable] + sys.argv)
 
     async def get_args(self, msg):
         try:
@@ -568,6 +655,9 @@ class Userbot:
                 self.autoreply_time[user_id] = 1
                 self.autoreply_photo[user_id] = None
                 await msg.edit(f'<b>⛧ АВТООТВЕТЧИК ВКЛЮЧЕН ⛧</b>\n\n<b>Жертва:</b> <code>{user_id}</code>\n<b>Шапка:</b> {shapka if shapka else "нет"}\n<b>Задержка:</b> 1 сек\n\n<b>Остановить:</b> .aaoff {user_id}', parse_mode='html')
+                self.save_json(self.autoreply_file, self.autoreply_list)
+                self.save_json(self.autoreply_time_file, self.autoreply_time)
+                self.save_json(self.autoreply_shpk_file, self.autoreply_shpk)
             elif len(args) >= 2:
                 target = args[1]
                 try:
@@ -586,6 +676,9 @@ class Userbot:
                     self.autoreply_photo[user_id] = None
                     name = entity.first_name or entity.username or str(user_id)
                     await msg.edit(f'<b>⛧ АВТООТВЕТЧИК ВКЛЮЧЕН ⛧</b>\n\n<b>Жертва:</b> {name} (<code>{user_id}</code>)\n<b>Шапка:</b> {shapka if shapka else "нет"}\n<b>Задержка:</b> 1 сек\n\n<b>Остановить:</b> .aaoff {user_id}', parse_mode='html')
+                    self.save_json(self.autoreply_file, self.autoreply_list)
+                    self.save_json(self.autoreply_time_file, self.autoreply_time)
+                    self.save_json(self.autoreply_shpk_file, self.autoreply_shpk)
                 except Exception as e:
                     await msg.edit(f'<b>⛧ ОШИБКА ⛧</b>\n\nНе удалось найти пользователя: {e}', parse_mode='html')
             else:
@@ -617,6 +710,11 @@ class Userbot:
                 if user_id in self.autoreply_spam_tracker:
                     del self.autoreply_spam_tracker[user_id]
                 await msg.edit(f'<b>⛧ АВТООТВЕТЧИК ВЫКЛЮЧЕН ⛧</b>\n\n<b>Жертва:</b> <code>{user_id}</code>', parse_mode='html')
+                self.save_json(self.autoreply_file, self.autoreply_list)
+                self.save_json(self.autoreply_time_file, self.autoreply_time)
+                self.save_json(self.autoreply_photo_file, self.autoreply_photo)
+                self.save_json(self.autoreply_shpk_file, self.autoreply_shpk)
+                self.save_json(self.autoreply_tracker_file, self.autoreply_spam_tracker)
             else:
                 await msg.edit('<b>⛧ ОШИБКА ⛧</b>\n\nАвтоответчик на этого пользователя не найден', parse_mode='html')
         
@@ -645,6 +743,7 @@ class Userbot:
                 if user_id in self.autoreply_list:
                     self.autoreply_time[user_id] = delay
                     await msg.edit(f'<b>⛧ ЗАДЕРЖКА ИЗМЕНЕНА ⛧</b>\n\n<b>Жертва:</b> <code>{user_id}</code>\n<b>Новая задержка:</b> {delay} сек', parse_mode='html')
+                    self.save_json(self.autoreply_time_file, self.autoreply_time)
                 else:
                     await msg.edit(f'<b>⛧ ОШИБКА ⛧</b>\n\nАвтоответчик на <code>{user_id}</code> не активен', parse_mode='html')
             except:
@@ -657,6 +756,7 @@ class Userbot:
                 if user_id in self.autoreply_list:
                     self.autoreply_shpk[user_id] = shapka
                     await msg.edit(f'<b>⛧ ШАПКА ИЗМЕНЕНА ⛧</b>\n\n<b>Жертва:</b> <code>{user_id}</code>\n<b>Новая шапка:</b> {shapka}', parse_mode='html')
+                    self.save_json(self.autoreply_shpk_file, self.autoreply_shpk)
                 else:
                     await msg.edit(f'<b>⛧ ОШИБКА ⛧</b>\n\nАвтоответчик на <code>{user_id}</code> не активен', parse_mode='html')
             except:
@@ -669,6 +769,7 @@ class Userbot:
                 if user_id in self.autoreply_list and media:
                     self.autoreply_photo[user_id] = media
                     await msg.edit(f'<b>⛧ МЕДИА ИЗМЕНЕНО ⛧</b>\n\n<b>Жертва:</b> <code>{user_id}</code>', parse_mode='html')
+                    self.save_json(self.autoreply_photo_file, self.autoreply_photo)
                 else:
                     await msg.edit(f'<b>⛧ ОШИБКА ⛧</b>\n\nАвтоответчик не активен или ссылка невалидна', parse_mode='html')
             except:
@@ -700,6 +801,9 @@ class Userbot:
         self.spam_state[chat_id] = True
         await msg.edit(f'<b>⛧ СПАМ ВКЛЮЧЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>\n\n<b>Выключить:</b> <code>.stop {chat_id}</code>', parse_mode='html')
         
+        # Сохраняем состояние
+        self.save_json(self.spam_file, self.spam_state)
+        
         while chat_id in self.spam_state and self.spam_state[chat_id]:
             try:
                 random_phrase = choice(current_shablon) if current_shablon else ""
@@ -718,6 +822,7 @@ class Userbot:
         
         if chat_id in self.spam_state:
             del self.spam_state[chat_id]
+            self.save_json(self.spam_file, self.spam_state)
         
         if media_url and media_path and os.path.exists(media_path):
             try:
@@ -731,6 +836,7 @@ class Userbot:
         if chat_id in self.spam_state:
             del self.spam_state[chat_id]
             await msg.edit(f"<b>⛧ СПАМ ОСТАНОВЛЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
+            self.save_json(self.spam_file, self.spam_state)
         else:
             await msg.edit(f"<b>⛧ СПАМ НЕ БЫЛ АКТИВЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
 
@@ -766,6 +872,9 @@ class Userbot:
         self.tagger_chats[chat_id] = True
         await msg.edit(f'<b>⛧ ТЕГГЕР ВКЛЮЧЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>\n<b>Жертва:</b> <code>{user_id}</code>\n\n<b>Выключить:</b> <code>.off {chat_id}</code>', parse_mode='html')
         
+        # Сохраняем состояние
+        self.save_json(self.tagger_file, self.tagger_chats)
+        
         while chat_id in self.tagger_chats:
             random_phrase = choice(current_shablon) if current_shablon else ""
             if custom_text:
@@ -786,6 +895,7 @@ class Userbot:
         
         if chat_id in self.tagger_chats:
             del self.tagger_chats[chat_id]
+            self.save_json(self.tagger_file, self.tagger_chats)
         
         if media_url and media_path and os.path.exists(media_path):
             try:
@@ -799,6 +909,7 @@ class Userbot:
         if chat_id in self.tagger_chats:
             del self.tagger_chats[chat_id]
             await msg.edit(f"<b>⛧ ТЕГГЕР ОСТАНОВЛЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
+            self.save_json(self.tagger_file, self.tagger_chats)
         else:
             await msg.edit(f"<b>⛧ ТЕГГЕР НЕ БЫЛ АКТИВЕН ⛧</b>\n\n<b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
 
@@ -1962,6 +2073,9 @@ class Userbot:
             'original_chat': msg.chat_id
         }
         
+        # Сохраняем состояние
+        self.save_json(self.poste_file, self.poste_list)
+        
         await msg.edit(f"<b>рассылка запущена\nссылка: {link}\nинтервал: {interval} мин\nчатов: {len(target_chats)}\nостановить: .poste_stop {link}</b>", parse_mode='html')
         asyncio.create_task(self._poste_worker(link))
 
@@ -2023,6 +2137,7 @@ class Userbot:
             
             if link in self.poste_list:
                 self.poste_list[link]['start_time'] = time.time()
+                self.save_json(self.poste_file, self.poste_list)
             
             await asyncio.sleep(interval_minutes * 60)
         
@@ -2034,6 +2149,7 @@ class Userbot:
                 except:
                     pass
             del self.poste_list[link]
+            self.save_json(self.poste_file, self.poste_list)
 
     async def poste_stop_handler(self, msg):
         args = await self.get_args(msg)
@@ -2041,11 +2157,13 @@ class Userbot:
             for link in list(self.poste_list.keys()):
                 self.poste_list[link]['running'] = False
             self.poste_list.clear()
+            self.save_json(self.poste_file, self.poste_list)
             return await msg.edit("<b>все рассылки остановлены</b>", parse_mode='html')
         link = args.strip()
         if link in self.poste_list:
             self.poste_list[link]['running'] = False
             del self.poste_list[link]
+            self.save_json(self.poste_file, self.poste_list)
             await msg.edit(f"<b>рассылка для {link} остановлена</b>", parse_mode='html')
         else:
             await msg.edit(f"<b>рассылка для {link} не найдена</b>", parse_mode='html')
@@ -2092,6 +2210,7 @@ class Userbot:
                 if chat_id not in self.poste_blocklist:
                     self.poste_blocklist.append(chat_id)
                 await msg.edit(f"<b>чат {chat_id} добавлен в блок-лист</b>", parse_mode='html')
+                self.save_json(self.blocklist_file, self.poste_blocklist)
             except Exception as e:
                 await msg.edit(f"<b>ошибка: {e}</b>", parse_mode='html')
         
@@ -2108,11 +2227,13 @@ class Userbot:
                 if chat_id in self.poste_blocklist:
                     self.poste_blocklist.remove(chat_id)
                 await msg.edit(f"<b>чат {chat_id} удалён из блок-листа</b>", parse_mode='html')
+                self.save_json(self.blocklist_file, self.poste_blocklist)
             except Exception as e:
                 await msg.edit(f"<b>ошибка: {e}</b>", parse_mode='html')
         
         elif action == 'clear':
             self.poste_blocklist.clear()
+            self.save_json(self.blocklist_file, self.poste_blocklist)
             await msg.edit("<b>блок-лист очищен</b>", parse_mode='html')
         
         else:
@@ -2120,6 +2241,7 @@ class Userbot:
 
     async def pblkclear_handler(self, msg):
         self.poste_blocklist.clear()
+        self.save_json(self.blocklist_file, self.poste_blocklist)
         await msg.edit("<b>блок-лист полностью очищен</b>", parse_mode='html')
 
     async def zw_handler(self, msg):
@@ -2154,6 +2276,9 @@ class Userbot:
         self.target_user = None
         self.target_chat_id_for_timer = None
         
+        # Сохраняем все состояния
+        self.save_all_state()
+        
         await msg.edit("<b>все функции остановлены</b>", parse_mode='html')
 
     async def run(self):
@@ -2168,6 +2293,7 @@ class Userbot:
         for item in DEFAULT_BLOCKLIST:
             if item not in self.poste_blocklist:
                 self.poste_blocklist.append(item)
+        self.save_json(self.blocklist_file, self.poste_blocklist)
         
         await self.client.start()
         print(f"[Аккаунт {self.account_index+1}] Бот запущен! ({self.client.session.filename})", flush=True)
@@ -2280,6 +2406,7 @@ class Userbot:
             elif text.startswith('.status'): await self.status_handler(msg)
             elif text.startswith('.zw'): await self.zw_handler(msg)
             elif text.startswith('.aa'): await self.autoreply_handler(msg)
+            elif text.startswith('.reload'): await self.reload_handler(msg)
             else:
                 print(f"[Аккаунт {self.account_index+1}] Неизвестная команда: {text[:50]}", flush=True)
 
