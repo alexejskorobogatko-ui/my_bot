@@ -2167,19 +2167,6 @@ class Userbot:
         await msg.edit("<b>все функции остановлены</b>", parse_mode='html')
 
     async def run(self):
-        DEFAULT_BLOCKLIST = [
-            "@kopilimakson",
-            "@PandemoniumHard",
-            "@societybygang",
-            "@patriarchyLCVR",
-            "3518499927",
-            "3885203951"
-        ]
-        for item in DEFAULT_BLOCKLIST:
-            if item not in self.poste_blocklist:
-                self.poste_blocklist.append(item)
-        self.save_json(self.blocklist_file, self.poste_blocklist)
-        
         await self.client.start()
         print(f"[Аккаунт {self.account_index+1}] Бот запущен! ({self.client.session.filename})", flush=True)
         me = await self.client.get_me()
