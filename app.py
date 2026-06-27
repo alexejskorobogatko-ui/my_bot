@@ -46,6 +46,11 @@ ACCOUNTS = [
         'session': 'session2',
         'api_id': 30843796,
         'api_hash': '535bed75aaa17ed391bc11e1dac2cb21'
+    },
+    {
+        'session': 'session3',
+        'api_id': 30843796,
+        'api_hash': '535bed75aaa17ed391bc11e1dac2cb21'
     }
 ]
 
@@ -83,14 +88,16 @@ start_time = time.time()
 mid = 'https://x0.at/cUQa.jpg'
 name = "Ralvatron"
 mh = 'https://x0.at/5-ku.mp4'
-mm = 'https://x0.at/5-ku.mp4'
+mm = 'https://x0.at/ck0Z.mp4'
 cmds = 'https://x0.at/Dv0D.jpg'
 status_media = None
 log_chat_id = None
 ping_history = []
-more_media = None
+more_media = 'https://x0.at/w_L8.mp4'
 custom_media = None
-postecom_media = None
+postecom_media = 'https://x0.at/5TrB.mp4'
+othermore_media = 'https://x0.at/ED99.MP4'
+incom_media = 'https://x0.at/PZYa.MP4'
 
 # ========== ЛОГ-ЧАТ ==========
 def load_log_chat():
@@ -192,6 +199,8 @@ menutext = """
 <b><code>.menu</code></b> — <b>спам и теггер</b>
 <b><code>.more</code></b> — <b>дополнительные функции</b>
 <b><code>.postecom</code></b> — <b>рассылка постов</b>
+<b><code>.othermore</code></b> — <b>шаблоны и медиа</b>
+<b><code>.incom</code></b> — <b>инструменты</b>
 
 ⛧ developer - @axilessbog
 """
@@ -219,20 +228,6 @@ menu = """
 more_text = """
 ⛧ Дополнительные функции ⛧
 
-<b>⛧ Шаблоны</b>
-<b><code>.shb list</code></b> — <b>список шаблонов</b>
-<b><code>.shb load [название]</code></b> — <b>загрузить шаблон</b>
-<b><code>.shb save + реплай на TXT</code></b> — <b>сохранить шаблон</b>
-<b><code>.shb del [название]</code></b> — <b>удалить шаблон</b>
-<b><code>.load + реплай на файл</code></b> — <b>загрузить шаблон из файла</b>
-<b><code>.file</code></b> — <b>выгрузить текущий шаблон</b>
-
-<b>⛧ Медиа</b>
-<b><code>.med save [номер] + реплай</code></b> — <b>сохранить медиа</b>
-<b><code>.med list</code></b> — <b>список медиа</b>
-<b><code>.med send [номер]</code></b> — <b>отправить медиа</b>
-<b><code>.med del [номер]</code></b> — <b>удалить медиа</b>
-
 <b>⛧ Слежение</b>
 <b><code>.track @username</code></b> — <b>включить слежение (1 час)</b>
 <b><code>.trackoff @username</code></b> — <b>выключить слежение</b>
@@ -243,13 +238,38 @@ more_text = """
 <b><code>.detectoff [номер]</code></b> — <b>остановить поиск</b>
 <b><code>.detectlist</code></b> — <b>список активных поисков</b>
 
-<b>⛧ Инструменты</b>
+⛧ developer - @axilessbog
+"""
+
+othermore_text = """
+⛧ Шаблоны ⛧
+
+<b><code>.shb list</code></b> — <b>список шаблонов</b>
+<b><code>.shb load [название]</code></b> — <b>загрузить шаблон</b>
+<b><code>.shb save + реплай на TXT</code></b> — <b>сохранить шаблон</b>
+<b><code>.shb del [название]</code></b> — <b>удалить шаблон</b>
+
+⛧ Медиа ⛧
+
+<b><code>.med save [номер] + реплай</code></b> — <b>сохранить медиа</b>
+<b><code>.med list</code></b> — <b>список медиа</b>
+<b><code>.med send [номер]</code></b> — <b>отправить медиа</b>
+<b><code>.med del [номер]</code></b> — <b>удалить медиа</b>
+
+⛧ developer - @axilessbog
+"""
+
+incom_text = """
+⛧ Инструменты ⛧
+
 <b><code>.log [ссылка/username/id]</code></b> — <b>установить лог-чат</b>
 <b><code>.scrape @username</code></b> — <b>выгрузить список участников</b>
 <b><code>.x0 + реплай</code></b> — <b>загрузить медиа на хостинг</b>
 <b><code>.autodel [сек]</code></b> — <b>автоудаление сообщений бота</b>
 <b><code>.check + реплай</code></b> — <b>проверка транслитерации</b>
 <b><code>.words + реплай</code></b> — <b>подсчёт слов/символов</b>
+<b><code>.target @username [минуты]</code></b> — <b>установить цель</b>
+<b><code>.tgoff</code></b> — <b>отключить цель</b>
 
 ⛧ developer - @axilessbog
 """
@@ -276,6 +296,8 @@ custom_text = """
 <b><code>.postecom [ссылка]</code></b> — <b>медиа для .postecom</b>
 <b><code>.id [ссылка]</code></b> — <b>медиа для .id</b>
 <b><code>.status [ссылка]</code></b> — <b>медиа для .status</b>
+<b><code>.othermore [ссылка]</code></b> — <b>медиа для .othermore</b>
+<b><code>.incom [ссылка]</code></b> — <b>медиа для .incom</b>
 
 ⛧ developer - @axilessbog
 """
@@ -1809,6 +1831,34 @@ class Userbot:
         else:
             await msg.edit(more_text, parse_mode='html')
 
+    async def othermore_handler(self, msg):
+        global othermore_media
+        if len(msg.text.split()) > 1:
+            othermore_media = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
+            return await msg.edit("<b>медиа для .othermore установлено</b>", parse_mode='html')
+        if othermore_media:
+            try:
+                await self.client.send_file(msg.chat_id, othermore_media, caption=othermore_text, parse_mode='html')
+                await msg.delete()
+            except:
+                await msg.edit(othermore_text, parse_mode='html')
+        else:
+            await msg.edit(othermore_text, parse_mode='html')
+
+    async def incom_handler(self, msg):
+        global incom_media
+        if len(msg.text.split()) > 1:
+            incom_media = msg.text.split(maxsplit=1)[1] if msg.text.split(maxsplit=1)[1].lower() != "none" else None
+            return await msg.edit("<b>медиа для .incom установлено</b>", parse_mode='html')
+        if incom_media:
+            try:
+                await self.client.send_file(msg.chat_id, incom_media, caption=incom_text, parse_mode='html')
+                await msg.delete()
+            except:
+                await msg.edit(incom_text, parse_mode='html')
+        else:
+            await msg.edit(incom_text, parse_mode='html')
+
     async def postecom_handler(self, msg):
         global postecom_media
         if len(msg.text.split()) > 1:
@@ -2262,6 +2312,8 @@ class Userbot:
             elif text.startswith('.help'): await self.help_handler(msg)
             elif text.startswith('.menu'): await self.menu_handler(msg)
             elif text.startswith('.more'): await self.more_handler(msg)
+            elif text.startswith('.othermore'): await self.othermore_handler(msg)
+            elif text.startswith('.incom'): await self.incom_handler(msg)
             elif text.startswith('.custom'): await self.custom_handler(msg)
             elif text.startswith('.files'): await self.files_handler(msg)
             elif text.startswith('.postecom'): await self.postecom_handler(msg)
