@@ -8,6 +8,7 @@ import glob
 import re
 import json
 import subprocess
+import aiohttp
 from random import choice
 from datetime import datetime, timedelta
 
@@ -267,7 +268,6 @@ menutext = """
 <b><code>.ping</code></b> — <b>пинг + аптайм</b>
 <b><code>.status</code></b> — <b>статус функций</b>
 <b><code>.zw</code></b> — <b>остановить всё</b>
-<b><code>.reload</code></b> — <b>перезапустить бота</b>
 <b><code>.menu</code></b> — <b>спам и теггер</b>
 <b><code>.more</code></b> — <b>дополнительные функции</b>
 <b><code>.postecom</code></b> — <b>рассылка постов</b>
@@ -533,34 +533,6 @@ class Userbot:
                 break
             await asyncio.sleep(5)
 
-    # ========== КОМАНДА .reload ==========
-    async def reload_handler(self, msg):
-        """Перезапускает бота с сохранением состояния"""
-        await msg.edit("<b>⛧ ПЕРЕЗАПУСК ⛧</b>\n\nСохраняю состояние...", parse_mode='html')
-        
-        self.save_all_state()
-        
-        await msg.edit("<b>⛧ ПЕРЕЗАПУСК ⛧</b>\n\nПодтягиваю изменения с GitHub...", parse_mode='html')
-        
-        try:
-            result = subprocess.run(["git", "pull"], capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
-            
-            if "Already up to date" in result.stdout:
-                await msg.edit("<b>⛧ ПЕРЕЗАПУСК ⛧</b>\n\nКод актуален.\n\nПерезапускаюсь...", parse_mode='html')
-            else:
-                await msg.edit(
-                    f"<b>⛧ ОБНОВЛЕНИЕ ЗАГРУЖЕНО ⛧</b>\n\n"
-                    f"<code>{result.stdout[:300]}</code>\n\n"
-                    f"Перезапускаюсь...",
-                    parse_mode='html'
-                )
-        except Exception as e:
-            await msg.edit(f"<b>⛧ ОШИБКА GIT ⛧</b>\n\n{e}", parse_mode='html')
-            return
-        
-        await asyncio.sleep(1)
-        os.execv(sys.executable, [sys.executable] + sys.argv)
-
     async def get_args(self, msg):
         try:
             text = msg.text if hasattr(msg, 'text') else msg.message.message
@@ -654,16 +626,17 @@ class Userbot:
             return get_media_path(media_id)
         elif media_url:
             try:
-                response = requests.get(media_url, timeout=30)
-                if response.status_code == 200:
-                    temp_file = f"temp_media_{int(time.time())}"
-                    ext = media_url.split('.')[-1].split('?')[0]
-                    if len(ext) > 5:
-                        ext = 'bin'
-                    temp_path = os.path.join(MEDIA_DIR, f"{temp_file}.{ext}")
-                    with open(temp_path, 'wb') as f:
-                        f.write(response.content)
-                    return temp_path
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(media_url, timeout=30) as response:
+                        if response.status == 200:
+                            temp_file = f"temp_media_{int(time.time())}"
+                            ext = media_url.split('.')[-1].split('?')[0]
+                            if len(ext) > 5:
+                                ext = 'bin'
+                            temp_path = os.path.join(MEDIA_DIR, f"{temp_file}.{ext}")
+                            with open(temp_path, 'wb') as f:
+                                f.write(await response.read())
+                            return temp_path
             except Exception as e:
                 logger.error(f"[Аккаунт {self.account_index+1}] Ошибка скачивания по ссылке: {e}")
         return None
@@ -876,7 +849,6 @@ class Userbot:
         chat_id = msg.chat_id
         
         self.spam_state[chat_id] = True
-        # ===== ИСПРАВЛЕНО: УБРАНЫ ОТСТУПЫ =====
         await msg.edit(f'<b>⛧ СПАМ ВКЛЮЧЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>\n⛧ <b>Выключить:</b> <code>.stop {chat_id}</code>', parse_mode='html')
         
         self.save_json(self.spam_file, self.spam_state)
@@ -923,7 +895,6 @@ class Userbot:
         chat_id = int(args.split()[0]) if args else msg.chat_id
         if chat_id in self.spam_state:
             del self.spam_state[chat_id]
-            # ===== ИСПРАВЛЕНО: УБРАНЫ ОТСТУПЫ =====
             await msg.edit(f"<b>⛧ СПАМ ОСТАНОВЛЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
             self.save_json(self.spam_file, self.spam_state)
         else:
@@ -963,7 +934,6 @@ class Userbot:
         chat_id = reply_to_msg.chat_id if reply_to_msg else msg.chat_id
         
         self.tagger_chats[chat_id] = True
-        # ===== ИСПРАВЛЕНО: УБРАНЫ ОТСТУПЫ =====
         await msg.edit(f'<b>⛧ ТЕГГЕР ВКЛЮЧЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>\n⛧ <b>Жертва:</b> <code>{user_id}</code>\n⛧ <b>Выключить:</b> <code>.off {chat_id}</code>', parse_mode='html')
         
         self.save_json(self.tagger_file, self.tagger_chats)
@@ -1005,7 +975,6 @@ class Userbot:
         chat_id = int(args.split()[0]) if args else msg.chat_id
         if chat_id in self.tagger_chats:
             del self.tagger_chats[chat_id]
-            # ===== ИСПРАВЛЕНО: УБРАНЫ ОТСТУПЫ =====
             await msg.edit(f"<b>⛧ ТЕГГЕР ОСТАНОВЛЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
             self.save_json(self.tagger_file, self.tagger_chats)
         else:
@@ -1323,6 +1292,7 @@ class Userbot:
         os.remove('texts.txt')
         await msg.delete()
 
+    # ========== ОПТИМИЗИРОВАННЫЙ .ping ==========
     async def ping_handler(self, msg):
         # Защита от пересылки
         if self._is_forwarded(msg):
@@ -1332,10 +1302,14 @@ class Userbot:
         bot_runtime = int(time.time() - start_time)
         uptime_str = str(timedelta(seconds=bot_runtime))
         
-        start_ping = time.time()
-        await msg.edit("<b>измеряю пинг...</b>", parse_mode='html')
-        end_ping = time.time()
-        ping_ms = round((end_ping - start_ping) * 1000, 2)
+        start_ping = time.perf_counter_ns()
+        try:
+            test_msg = await self.client.send_message(msg.chat_id, "⛧ измеряю пинг...")
+            await test_msg.delete()
+        except:
+            pass
+        end_ping = time.perf_counter_ns()
+        ping_ms = round((end_ping - start_ping) / 10**6, 2)
         
         ping_history.append(ping_ms)
         if len(ping_history) > 10:
@@ -1706,7 +1680,6 @@ class Userbot:
         if self._is_forwarded(msg):
             return
         
-        # Используем существующий таргет
         if self.target_user:
             await msg.edit(f"<b>⛧ АКТИВНАЯ ЦЕЛЬ ⛧</b>\n\n<b>Цель:</b> <code>{self.target_user}</code>\n<b>Чат:</b> <code>{self.target_chat_id_for_timer}</code>\n\n<b>Остановить:</b> <code>.tgoff</code>", parse_mode='html')
         else:
@@ -2840,6 +2813,7 @@ class Userbot:
         
         await msg.edit("<b>все функции остановлены</b>", parse_mode='html')
 
+    # ========== ЗАПУСК БОТА С ОПТИМИЗАЦИЕЙ ==========
     async def run(self):
         await self.client.start()
         print(f"[Аккаунт {self.account_index+1}] Бот запущен! ({self.client.session.filename})", flush=True)
@@ -2852,10 +2826,11 @@ class Userbot:
             msg = event.message
             text = msg.text or ""
             
+            # ===== ВХОДЯЩИЕ СООБЩЕНИЯ (только watcher) =====
             if not msg.out:
                 await self.watcher(msg)
                 
-                if self.target_user and not msg.out:
+                if self.target_user:
                     sender = await msg.get_sender()
                     if sender and (sender.username == self.target_user or str(sender.id) == self.target_user):
                         try:
@@ -2901,12 +2876,13 @@ class Userbot:
                         
                         new_task = asyncio.create_task(track_wait_and_notify())
                         self.track_list[chat_id][user_id]['task'] = new_task
-                return
+                return  # ← ВАЖНО: не обрабатываем команды из чужих сообщений
             
+            # ===== ИСХОДЯЩИЕ СООБЩЕНИЯ (команды от себя) =====
             if not text:
                 return
             
-            # Защита от пересылки для всех команд
+            # Защита от пересылки
             if self._is_forwarded(msg):
                 logger.info(f"[Аккаунт {self.account_index+1}] Игнорируем пересланную команду: {text[:50]}")
                 return
@@ -2964,25 +2940,36 @@ class Userbot:
             elif text.startswith('.zw'): await self.zw_handler(msg)
             elif text.startswith('.reply') or text.startswith('.creply') or text.startswith('.reply_list') or text.startswith('.reply_time') or text.startswith('.reply_media'):
                 await self.autoreply_handler(msg)
-            elif text.startswith('.reload'): await self.reload_handler(msg)
             else:
                 print(f"[Аккаунт {self.account_index+1}] Неизвестная команда: {text[:50]}", flush=True)
 
         await self.client.run_until_disconnected()
 
 
-# ==================== ЗАПУСК ВСЕХ АККАУНТОВ ====================
+# ==================== ЗАПУСК ВСЕХ АККАУНТОВ (С МОНИТОРИНГОМ) ====================
 async def main():
-    """Запускает все аккаунты из списка ACCOUNTS"""
+    """Запускает все аккаунты из списка ACCOUNTS с мониторингом"""
     bots = []
     for i in range(len(ACCOUNTS)):
         bot = Userbot(i)
         bots.append(bot)
         asyncio.create_task(bot.run())
     
-    # Keep the main loop running
-    while True:
-        await asyncio.sleep(1)
+    # Даём задачам время на запуск
+    await asyncio.sleep(2)
+    
+    # Мониторинг состояния аккаунтов
+    try:
+        while True:
+            for bot in bots:
+                if not bot.client.is_connected():
+                    idx = bots.index(bot) + 1
+                    logger.error(f"[Аккаунт {idx}] Бот отключился, перезапускаем...")
+                    print(f"[Аккаунт {idx}] Перезапуск...", flush=True)
+                    asyncio.create_task(bot.run())
+            await asyncio.sleep(30)  # Проверяем каждые 30 секунд
+    except asyncio.CancelledError:
+        pass
 
 
 if __name__ == "__main__":
