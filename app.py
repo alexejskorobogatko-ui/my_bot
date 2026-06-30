@@ -1293,7 +1293,7 @@ class Userbot:
         await msg.delete()
 
     # ========== ОПТИМИЗИРОВАННЫЙ .ping ==========
-    async def ping_handler(self, msg):
+async def ping_handler(self, msg):
     if self._is_forwarded(msg):
         return
     
