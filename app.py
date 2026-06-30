@@ -1292,33 +1292,33 @@ class Userbot:
         os.remove('texts.txt')
         await msg.delete()
 
-    # ========== ОПТИМИЗИРОВАННЫЙ .ping ==========
-async def ping_handler(self, msg):
-    if self._is_forwarded(msg):
-        return
-    
-    global ping_history
-    bot_runtime = int(time.time() - start_time)
-    uptime_str = str(timedelta(seconds=bot_runtime))
-    
-    start_ping = time.perf_counter_ns()
-    try:
-        await self.client.get_me()  # ← НАСТОЯЩИЙ ЗАПРОС К API
-    except:
-        pass
-    end_ping = time.perf_counter_ns()
-    ping_ms = round((end_ping - start_ping) / 10**6, 2)
-    
-    ping_history.append(ping_ms)
-    if len(ping_history) > 10:
-        ping_history.pop(0)
-    
-    avg_ping = round(sum(ping_history) / len(ping_history), 2) if ping_history else ping_ms
-    min_ping = min(ping_history) if ping_history else ping_ms
-    max_ping = max(ping_history) if ping_history else ping_ms
-    
-    result = f"<b>⛧ Аптайм:</b> {uptime_str}\n<b>⛧ Пинг:</b> {ping_ms} ms\n<b>⛧ Средний:</b> {avg_ping} ms (посл. {len(ping_history)})\n<b>⛧ Мин / Макс:</b> {min_ping} ms / {max_ping} ms"
-    await msg.edit(result, parse_mode='html')
+    # ========== НАСТОЯЩИЙ ПИНГ (РЕАЛЬНЫЙ ЗАПРОС К API) ==========
+    async def ping_handler(self, msg):
+        if self._is_forwarded(msg):
+            return
+        
+        global ping_history
+        bot_runtime = int(time.time() - start_time)
+        uptime_str = str(timedelta(seconds=bot_runtime))
+        
+        start_ping = time.perf_counter_ns()
+        try:
+            await self.client.get_me()  # ← НАСТОЯЩИЙ ЗАПРОС К API
+        except:
+            pass
+        end_ping = time.perf_counter_ns()
+        ping_ms = round((end_ping - start_ping) / 10**6, 2)
+        
+        ping_history.append(ping_ms)
+        if len(ping_history) > 10:
+            ping_history.pop(0)
+        
+        avg_ping = round(sum(ping_history) / len(ping_history), 2) if ping_history else ping_ms
+        min_ping = min(ping_history) if ping_history else ping_ms
+        max_ping = max(ping_history) if ping_history else ping_ms
+        
+        result = f"<b>⛧ Аптайм:</b> {uptime_str}\n<b>⛧ Пинг:</b> {ping_ms} ms\n<b>⛧ Средний:</b> {avg_ping} ms (посл. {len(ping_history)})\n<b>⛧ Мин / Макс:</b> {min_ping} ms / {max_ping} ms"
+        await msg.edit(result, parse_mode='html')
 
     async def target_handler(self, msg):
         # Защита от пересылки
@@ -2812,7 +2812,7 @@ async def ping_handler(self, msg):
         await msg.edit("<b>все функции остановлены</b>", parse_mode='html')
 
     # ========== ЗАПУСК БОТА С ОПТИМИЗАЦИЕЙ ==========
-    async def run(self):
+    async def run_bot(self):
         await self.client.start()
         print(f"[Аккаунт {self.account_index+1}] Бот запущен! ({self.client.session.filename})", flush=True)
         me = await self.client.get_me()
@@ -2951,7 +2951,7 @@ async def main():
     for i in range(len(ACCOUNTS)):
         bot = Userbot(i)
         bots.append(bot)
-        asyncio.create_task(bot.run())
+        asyncio.create_task(bot.run_bot())
     
     # Даём задачам время на запуск
     await asyncio.sleep(2)
@@ -2964,7 +2964,7 @@ async def main():
                     idx = bots.index(bot) + 1
                     logger.error(f"[Аккаунт {idx}] Бот отключился, перезапускаем...")
                     print(f"[Аккаунт {idx}] Перезапуск...", flush=True)
-                    asyncio.create_task(bot.run())
+                    asyncio.create_task(bot.run_bot())
             await asyncio.sleep(30)  # Проверяем каждые 30 секунд
     except asyncio.CancelledError:
         pass
