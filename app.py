@@ -1294,33 +1294,31 @@ class Userbot:
 
     # ========== ОПТИМИЗИРОВАННЫЙ .ping ==========
     async def ping_handler(self, msg):
-        # Защита от пересылки
-        if self._is_forwarded(msg):
-            return
-        
-        global ping_history
-        bot_runtime = int(time.time() - start_time)
-        uptime_str = str(timedelta(seconds=bot_runtime))
-        
-        start_ping = time.perf_counter_ns()
-        try:
-            test_msg = await self.client.send_message(msg.chat_id, "⛧ измеряю пинг...")
-            await test_msg.delete()
-        except:
-            pass
-        end_ping = time.perf_counter_ns()
-        ping_ms = round((end_ping - start_ping) / 10**6, 2)
-        
-        ping_history.append(ping_ms)
-        if len(ping_history) > 10:
-            ping_history.pop(0)
-        
-        avg_ping = round(sum(ping_history) / len(ping_history), 2) if ping_history else ping_ms
-        min_ping = min(ping_history) if ping_history else ping_ms
-        max_ping = max(ping_history) if ping_history else ping_ms
-        
-        result = f"<b>⛧ Аптайм:</b> {uptime_str}\n<b>⛧ Пинг:</b> {ping_ms} ms\n<b>⛧ Средний:</b> {avg_ping} ms (посл. {len(ping_history)})\n<b>⛧ Мин / Макс:</b> {min_ping} ms / {max_ping} ms"
-        await msg.edit(result, parse_mode='html')
+    if self._is_forwarded(msg):
+        return
+    
+    global ping_history
+    bot_runtime = int(time.time() - start_time)
+    uptime_str = str(timedelta(seconds=bot_runtime))
+    
+    start_ping = time.perf_counter_ns()
+    try:
+        await self.client.get_me()  # ← НАСТОЯЩИЙ ЗАПРОС К API
+    except:
+        pass
+    end_ping = time.perf_counter_ns()
+    ping_ms = round((end_ping - start_ping) / 10**6, 2)
+    
+    ping_history.append(ping_ms)
+    if len(ping_history) > 10:
+        ping_history.pop(0)
+    
+    avg_ping = round(sum(ping_history) / len(ping_history), 2) if ping_history else ping_ms
+    min_ping = min(ping_history) if ping_history else ping_ms
+    max_ping = max(ping_history) if ping_history else ping_ms
+    
+    result = f"<b>⛧ Аптайм:</b> {uptime_str}\n<b>⛧ Пинг:</b> {ping_ms} ms\n<b>⛧ Средний:</b> {avg_ping} ms (посл. {len(ping_history)})\n<b>⛧ Мин / Макс:</b> {min_ping} ms / {max_ping} ms"
+    await msg.edit(result, parse_mode='html')
 
     async def target_handler(self, msg):
         # Защита от пересылки
