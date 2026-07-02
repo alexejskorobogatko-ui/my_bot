@@ -420,6 +420,7 @@ class Userbot:
         )
         
         # ===== ПЕРЕМЕННЫЕ =====
+        self.me_id = None  # ← ДОБАВЛЕНО!
         self.spam_state = {}
         self.tagger_chats = {}
         self.autodel_tasks = {}
@@ -1303,7 +1304,7 @@ class Userbot:
         
         start_ping = time.perf_counter_ns()
         try:
-            await self.client.get_me()  # ← НАСТОЯЩИЙ ЗАПРОС К API
+            await self.client.get_me()
         except:
             pass
         end_ping = time.perf_counter_ns()
@@ -2814,9 +2815,11 @@ class Userbot:
     # ========== ЗАПУСК БОТА С ОПТИМИЗАЦИЕЙ ==========
     async def run_bot(self):
         await self.client.start()
-        print(f"[Аккаунт {self.account_index+1}] Бот запущен! ({self.client.session.filename})", flush=True)
         me = await self.client.get_me()
+        self.me_id = me.id  # ← СОХРАНЯЕМ ID АККАУНТА!
+        print(f"[Аккаунт {self.account_index+1}] Бот запущен! ({self.client.session.filename})", flush=True)
         print(f"[Аккаунт {self.account_index+1}] Имя: {me.first_name} (@{me.username})", flush=True)
+        print(f"[Аккаунт {self.account_index+1}] ID: {self.me_id}", flush=True)
         print(f"[Аккаунт {self.account_index+1}] Команды загружены. Ожидание сообщений...", flush=True)
 
         @self.client.on(events.NewMessage)
@@ -2883,6 +2886,10 @@ class Userbot:
             # Защита от пересылки
             if self._is_forwarded(msg):
                 logger.info(f"[Аккаунт {self.account_index+1}] Игнорируем пересланную команду: {text[:50]}")
+                return
+            
+            # ===== ФИЛЬТР: КОМАНДЫ ТОЛЬКО ОТ ЭТОГО АККАУНТА =====
+            if msg.sender_id != self.me_id:
                 return
             
             print(f"[Аккаунт {self.account_index+1}] Команда: {text[:100]}", flush=True)
