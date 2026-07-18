@@ -45,20 +45,17 @@ LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, 'bot.log')
 
-# Создаём логгер
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
 
-# Ротация логов (максимум 5 файлов по 1 МБ)
 handler = RotatingFileHandler(
     LOG_FILE,
-    maxBytes=1024*1024,  # 1 МБ
+    maxBytes=1024*1024,
     backupCount=5
 )
 handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
 logger.addHandler(handler)
 
-# Отключаем логи Telethon
 logging.getLogger('telethon').setLevel(logging.WARNING)
 
 # ==================== ДАННЫЕ ДЛЯ АККАУНТОВ ====================
@@ -420,7 +417,7 @@ class Userbot:
         )
         
         # ===== ПЕРЕМЕННЫЕ =====
-        self.me_id = None  # ← ДОБАВЛЕНО!
+        self.me_id = None
         self.spam_state = {}
         self.tagger_chats = {}
         self.autodel_tasks = {}
@@ -442,6 +439,10 @@ class Userbot:
         
         # AFK
         self.afk_user_list = []
+        
+        # ===== СПИСКИ ЗАДАЧ ДЛЯ ОСТАНОВКИ =====
+        self.spam_tasks = {}      # ← ДОБАВЛЕНО!
+        self.tagger_tasks = {}    # ← ДОБАВЛЕНО!
         
         # ===== ФАЙЛЫ ДЛЯ СОХРАНЕНИЯ =====
         acc = account_index + 1
@@ -483,7 +484,6 @@ class Userbot:
             pass
 
     def save_all_state(self):
-        """Сохраняет все состояния"""
         self.save_json(self.blocklist_file, self.poste_blocklist)
         self.save_json(self.poste_file, self.poste_list)
         self.save_json(self.track_file, self.track_list)
@@ -497,20 +497,15 @@ class Userbot:
     def save_track_list(self):
         self.save_json(self.track_file, self.track_list)
 
-    # ========== ЗАЩИТА ОТ ПЕРЕСЫЛКИ ==========
     def _is_forwarded(self, msg):
-        """Проверяет, является ли сообщение пересылкой"""
         try:
             return bool(getattr(msg, 'forward', None))
         except:
             return False
 
-    # ========== ВОССТАНОВЛЕНИЕ АКТИВНЫХ ЗАДАЧ ==========
     async def restore_spam(self, chat_id):
-        """Восстанавливает спам-цикл после перезапуска"""
         if not self.spam_state.get(chat_id):
             return
-        
         while self.spam_state.get(chat_id):
             try:
                 random_phrase = choice(current_shablon) if current_shablon else ""
@@ -521,10 +516,8 @@ class Userbot:
             await asyncio.sleep(5)
 
     async def restore_tagger(self, chat_id):
-        """Восстанавливает теггер-цикл после перезапуска"""
         if not self.tagger_chats.get(chat_id):
             return
-        
         while self.tagger_chats.get(chat_id):
             try:
                 random_phrase = choice(current_shablon) if current_shablon else ""
@@ -567,7 +560,6 @@ class Userbot:
 
     async def resolve_log_chat(self, chat_ref):
         chat_ref = chat_ref.strip()
-        
         if 't.me/joinchat' in chat_ref or 't.me/+-' in chat_ref or 't.me/+' in chat_ref:
             try:
                 if 't.me/joinchat/' in chat_ref:
@@ -576,34 +568,29 @@ class Userbot:
                     hash_part = chat_ref.split('t.me/+-')[-1].split('?')[0]
                 else:
                     hash_part = chat_ref.split('t.me/+')[-1].split('?')[0]
-                
                 updates = await self.client(ImportChatInviteRequest(hash_part))
                 if updates.chats:
                     chat_id = updates.chats[0].id
                     return chat_id
             except Exception as e:
                 logger.error(f"[Аккаунт {self.account_index+1}] Ошибка вступления по ссылке: {e}")
-        
         if chat_ref.lstrip('-').isdigit():
             try:
                 entity = await self.client.get_entity(int(chat_ref))
                 return entity.id
             except:
                 pass
-        
         if chat_ref.startswith('@'):
             try:
                 entity = await self.client.get_entity(chat_ref)
                 return entity.id
             except:
                 pass
-        
         try:
             entity = await self.client.get_entity(chat_ref)
             return entity.id
         except:
             pass
-        
         return None
 
     def parse_media_and_text(self, args_list):
@@ -642,69 +629,85 @@ class Userbot:
                 logger.error(f"[Аккаунт {self.account_index+1}] Ошибка скачивания по ссылке: {e}")
         return None
 
-    # ========== АВТООТВЕТЧИК ==========
+    # ========== АВТООТВЕТЧИК (ИСПРАВЛЕННЫЙ) ==========
     async def watcher(self, msg):
         global afk_state, afk_reason, afk_photo, afk_captcha, afk_start_time, afk_user_list
         
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
-        if not msg.out:
-            user_id = msg.sender_id
+        if msg.out:
+            return
+        
+        user_id = msg.sender_id
+        
+        # ===== AFK (ТОЛЬКО В ЛИЧКЕ!) =====
+        if afk_state:
+            chat = await msg.get_chat()
+            is_private = hasattr(chat, 'first_name') and not hasattr(chat, 'title')
             
-            # ===== AFK =====
-            if afk_state:
-                if user_id not in afk_user_list:
-                    afk_user_list.append(user_id)
-                    time_now = datetime.now()
-                    timing = time_now - afk_start_time
-                    time_result = str(timing).split('.')[0]
-                    captcha = afk_captcha if afk_captcha else ""
-                    reply_text = f"{captcha} я в АФК уже <code>{time_result}</code>\nпо причине: <code>{afk_reason}</code>"
-                    if afk_photo:
-                        await msg.reply(reply_text, file=afk_photo, parse_mode='html')
-                    else:
-                        await msg.reply(reply_text, parse_mode='html')
-            
-            # ===== АВТООТВЕТЧИК =====
-            if user_id in self.autoreply_list:
-                current_time = time.time()
-                
-                if user_id not in self.autoreply_spam_tracker:
-                    self.autoreply_spam_tracker[user_id] = {
-                        'count': 0,
-                        'last_time': current_time,
-                        'last_reply_time': 0
-                    }
-                
-                tracker = self.autoreply_spam_tracker[user_id]
-                
-                if current_time - tracker['last_time'] < 2:
-                    tracker['count'] += 1
+            if is_private and user_id not in afk_user_list:
+                afk_user_list.append(user_id)
+                time_now = datetime.now()
+                timing = time_now - afk_start_time
+                time_result = str(timing).split('.')[0]
+                captcha = afk_captcha if afk_captcha else ""
+                reply_text = f"{captcha} я в АФК уже <code>{time_result}</code>\nпо причине: <code>{afk_reason}</code>"
+                if afk_photo:
+                    await msg.reply(reply_text, file=afk_photo, parse_mode='html')
                 else:
-                    tracker['count'] = 1
-                tracker['last_time'] = current_time
-                
-                should_reply = False
-                if tracker['count'] > 3:
-                    if current_time - tracker['last_reply_time'] >= 3:
-                        should_reply = True
-                else:
-                    last_reply = self.autoreply_spam_tracker.get(user_id, {}).get('last_reply_time', 0)
-                    delay = self.autoreply_time.get(user_id, 1)
-                    if current_time - last_reply >= delay:
-                        should_reply = True
-                
-                if should_reply:
-                    tracker['last_reply_time'] = current_time
-                    await asyncio.sleep(self.autoreply_time.get(user_id, 1))
-                    text = choice(current_shablon) if current_shablon else ""
-                    await msg.reply(text, file=self.autoreply_photo.get(user_id), parse_mode='html')
+                    await msg.reply(reply_text, parse_mode='html')
+                return
+        
+        # ===== АВТООТВЕТЧИК (ИСПРАВЛЕННЫЙ) =====
+        if user_id not in self.autoreply_list:
+            return
+        
+        current_time = time.time()
+        
+        if user_id not in self.autoreply_spam_tracker:
+            self.autoreply_spam_tracker[user_id] = {
+                'count': 0,
+                'last_time': current_time,
+                'last_reply_time': 0
+            }
+        
+        tracker = self.autoreply_spam_tracker[user_id]
+        
+        if current_time - tracker['last_time'] < 2:
+            tracker['count'] += 1
+        else:
+            tracker['count'] = 1
+        tracker['last_time'] = current_time
+        
+        delay = self.autoreply_time.get(user_id, 1)
+        time_since_last_reply = current_time - tracker['last_reply_time']
+        
+        should_reply = False
+        if tracker['count'] > 3:
+            if time_since_last_reply >= 3:
+                should_reply = True
+        else:
+            if time_since_last_reply >= delay:
+                should_reply = True
+        
+        if not should_reply:
+            return
+        
+        tracker['last_reply_time'] = current_time
+        await asyncio.sleep(delay)
+        
+        if user_id not in self.autoreply_list:
+            return
+        
+        text = choice(current_shablon) if current_shablon else ""
+        if self.autoreply_photo.get(user_id):
+            await msg.reply(text, file=self.autoreply_photo.get(user_id), parse_mode='html')
+        else:
+            await msg.reply(text, parse_mode='html')
 
     # ========== АВТООТВЕТЧИК КОМАНДЫ ==========
     async def autoreply_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -822,9 +825,45 @@ class Userbot:
             except:
                 await msg.edit('<b>⛧ ИСПОЛЬЗОВАНИЕ ⛧</b>\n\n.reply_media [id] [ссылка]', parse_mode='html')
 
-    # ========== СПАМ ==========
+    # ========== СПАМ (ИСПРАВЛЕННЫЙ) ==========
+    async def _spam_loop(self, chat_id, time_val, media_path, custom_text, reply):
+        try:
+            while chat_id in self.spam_state and self.spam_state[chat_id]:
+                try:
+                    random_phrase = choice(current_shablon) if current_shablon else ""
+                    if custom_text:
+                        send_text = f"{custom_text} {random_phrase}".strip()
+                    else:
+                        send_text = random_phrase
+                    
+                    chat_key = str(chat_id)
+                    if chat_key in spam_captcha_by_chat and spam_captcha_by_chat[chat_key]:
+                        send_text = f"{spam_captcha_by_chat[chat_key]} {send_text}".strip()
+                    elif spam_captcha_global:
+                        send_text = f"{spam_captcha_global} {send_text}".strip()
+                    
+                    if media_path:
+                        await self.client.send_message(chat_id, send_text, file=media_path, reply_to=reply.id if reply else None)
+                    else:
+                        await self.client.send_message(chat_id, send_text, reply_to=reply.id if reply else None)
+                except Exception as e:
+                    logger.error(f"[Аккаунт {self.account_index+1}] Спам ошибка: {e}")
+                await asyncio.sleep(time_val)
+        except asyncio.CancelledError:
+            logger.info(f"[Аккаунт {self.account_index+1}] Спам в {chat_id} остановлен")
+        finally:
+            if chat_id in self.spam_state:
+                del self.spam_state[chat_id]
+                self.save_json(self.spam_file, self.spam_state)
+            if chat_id in self.spam_tasks:
+                del self.spam_tasks[chat_id]
+            if media_path and os.path.exists(media_path):
+                try:
+                    os.remove(media_path)
+                except:
+                    pass
+
     async def renewal_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -849,61 +888,73 @@ class Userbot:
         reply = await msg.get_reply_message()
         chat_id = msg.chat_id
         
+        # ===== ОСТАНАВЛИВАЕМ СТАРУЮ ЗАДАЧУ =====
+        if chat_id in self.spam_tasks:
+            self.spam_tasks[chat_id].cancel()
+            await asyncio.sleep(0.5)
+            del self.spam_tasks[chat_id]
+        
         self.spam_state[chat_id] = True
         await msg.edit(f'<b>⛧ СПАМ ВКЛЮЧЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>\n⛧ <b>Выключить:</b> <code>.stop {chat_id}</code>', parse_mode='html')
         
         self.save_json(self.spam_file, self.spam_state)
         
-        while chat_id in self.spam_state and self.spam_state[chat_id]:
-            try:
-                random_phrase = choice(current_shablon) if current_shablon else ""
-                if custom_text:
-                    send_text = f"{custom_text} {random_phrase}".strip()
-                else:
-                    send_text = random_phrase
-                
-                # Применяем спам-капчу
-                chat_key = str(chat_id)
-                if chat_key in spam_captcha_by_chat and spam_captcha_by_chat[chat_key]:
-                    send_text = f"{spam_captcha_by_chat[chat_key]} {send_text}".strip()
-                elif spam_captcha_global:
-                    send_text = f"{spam_captcha_global} {send_text}".strip()
-                
-                if media_path:
-                    await msg.respond(send_text, file=media_path, reply_to=reply.id if reply else None)
-                else:
-                    await msg.respond(send_text, reply_to=reply.id if reply else None)
-            except Exception as e:
-                logger.error(f"[Аккаунт {self.account_index+1}] Спам ошибка: {e}")
-            await asyncio.sleep(time_val)
-        
-        if chat_id in self.spam_state:
-            del self.spam_state[chat_id]
-            self.save_json(self.spam_file, self.spam_state)
-        
-        if media_url and media_path and os.path.exists(media_path):
-            try:
-                os.remove(media_path)
-            except:
-                pass
+        # ===== СОЗДАЁМ НОВУЮ ЗАДАЧУ =====
+        task = asyncio.create_task(self._spam_loop(chat_id, time_val, media_path, custom_text, reply))
+        self.spam_tasks[chat_id] = task
 
     async def stop_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
         args = await self.get_args(msg)
         chat_id = int(args.split()[0]) if args else msg.chat_id
+        
+        # ===== ОСТАНАВЛИВАЕМ ЗАДАЧУ =====
+        if chat_id in self.spam_tasks:
+            self.spam_tasks[chat_id].cancel()
+            await asyncio.sleep(0.5)
+            del self.spam_tasks[chat_id]
+        
         if chat_id in self.spam_state:
             del self.spam_state[chat_id]
-            await msg.edit(f"<b>⛧ СПАМ ОСТАНОВЛЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
             self.save_json(self.spam_file, self.spam_state)
-        else:
-            await msg.edit(f"<b>⛧ СПАМ НЕ БЫЛ АКТИВЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
+        
+        await msg.edit(f"<b>⛧ СПАМ ОСТАНОВЛЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
 
-    # ========== ТЕГГЕР ==========
+    # ========== ТЕГГЕР (ИСПРАВЛЕННЫЙ) ==========
+    async def _tagger_loop(self, chat_id, user_id, time_val, media_path, custom_text):
+        try:
+            while chat_id in self.tagger_chats:
+                random_phrase = choice(current_shablon) if current_shablon else ""
+                if custom_text:
+                    base_text = f"{custom_text} {random_phrase}".strip()
+                else:
+                    base_text = random_phrase
+                text = f"<a href='tg://user?id={user_id}'>{base_text}</a>"
+                try:
+                    if media_path:
+                        await self.client.send_file(chat_id, media_path, caption=text, parse_mode='html')
+                    else:
+                        await self.client.send_message(chat_id, text, parse_mode='html')
+                except Exception as e:
+                    logger.error(f"[Аккаунт {self.account_index+1}] Теггер ошибка: {e}")
+                await asyncio.sleep(time_val)
+        except asyncio.CancelledError:
+            logger.info(f"[Аккаунт {self.account_index+1}] Теггер в {chat_id} остановлен")
+        finally:
+            if chat_id in self.tagger_chats:
+                del self.tagger_chats[chat_id]
+                self.save_json(self.tagger_file, self.tagger_chats)
+            if chat_id in self.tagger_tasks:
+                del self.tagger_tasks[chat_id]
+            if media_path and os.path.exists(media_path):
+                try:
+                    os.remove(media_path)
+                except:
+                    pass
+
     async def tagger_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -934,56 +985,42 @@ class Userbot:
         reply_to_msg = await msg.get_reply_message()
         chat_id = reply_to_msg.chat_id if reply_to_msg else msg.chat_id
         
+        # ===== ОСТАНАВЛИВАЕМ СТАРУЮ ЗАДАЧУ =====
+        if chat_id in self.tagger_tasks:
+            self.tagger_tasks[chat_id].cancel()
+            await asyncio.sleep(0.5)
+            del self.tagger_tasks[chat_id]
+        
         self.tagger_chats[chat_id] = True
         await msg.edit(f'<b>⛧ ТЕГГЕР ВКЛЮЧЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>\n⛧ <b>Жертва:</b> <code>{user_id}</code>\n⛧ <b>Выключить:</b> <code>.off {chat_id}</code>', parse_mode='html')
         
         self.save_json(self.tagger_file, self.tagger_chats)
         
-        while chat_id in self.tagger_chats:
-            random_phrase = choice(current_shablon) if current_shablon else ""
-            if custom_text:
-                base_text = f"{custom_text} {random_phrase}".strip()
-            else:
-                base_text = random_phrase
-            
-            text = f"<a href='tg://user?id={user_id}'>{base_text}</a>"
-            
-            try:
-                if media_path:
-                    await self.client.send_file(chat_id, media_path, caption=text, parse_mode='html')
-                else:
-                    await self.client.send_message(chat_id, text, parse_mode='html')
-            except Exception as e:
-                logger.error(f"[Аккаунт {self.account_index+1}] Теггер ошибка: {e}")
-            await asyncio.sleep(time_val)
-        
-        if chat_id in self.tagger_chats:
-            del self.tagger_chats[chat_id]
-            self.save_json(self.tagger_file, self.tagger_chats)
-        
-        if media_url and media_path and os.path.exists(media_path):
-            try:
-                os.remove(media_path)
-            except:
-                pass
+        # ===== СОЗДАЁМ НОВУЮ ЗАДАЧУ =====
+        task = asyncio.create_task(self._tagger_loop(chat_id, user_id, time_val, media_path, custom_text))
+        self.tagger_tasks[chat_id] = task
 
     async def off_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
         args = await self.get_args(msg)
         chat_id = int(args.split()[0]) if args else msg.chat_id
+        
+        # ===== ОСТАНАВЛИВАЕМ ЗАДАЧУ =====
+        if chat_id in self.tagger_tasks:
+            self.tagger_tasks[chat_id].cancel()
+            await asyncio.sleep(0.5)
+            del self.tagger_tasks[chat_id]
+        
         if chat_id in self.tagger_chats:
             del self.tagger_chats[chat_id]
-            await msg.edit(f"<b>⛧ ТЕГГЕР ОСТАНОВЛЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
             self.save_json(self.tagger_file, self.tagger_chats)
-        else:
-            await msg.edit(f"<b>⛧ ТЕГГЕР НЕ БЫЛ АКТИВЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
+        
+        await msg.edit(f"<b>⛧ ТЕГГЕР ОСТАНОВЛЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
 
     # ========== СТАТУС ==========
     async def status_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1089,7 +1126,6 @@ class Userbot:
 
     # ========== ОСТАЛЬНЫЕ КОМАНДЫ ==========
     async def kalendar_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1167,7 +1203,6 @@ class Userbot:
         await msg.edit(f"<b>⛧ КАЛЕНДАРЬ ЗАПУЩЕН ⛧</b>\n⛧ <b>Интервал:</b> {time_val} мин\n⛧ <b>Остановить:</b> .clroff", parse_mode='html')
 
     async def clroff_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1180,7 +1215,6 @@ class Userbot:
             await msg.edit("<b>⛧ АКТИВНЫЙ КАЛЕНДАРЬ НЕ НАЙДЕН ⛧</b>", parse_mode='html')
 
     async def id_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1242,7 +1276,6 @@ class Userbot:
             await msg.edit(f"<b>ошибка: {e}</b>", parse_mode='html')
 
     async def words_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1258,7 +1291,6 @@ class Userbot:
             await msg.edit("<b>нужен реплай на сообщение</b>", parse_mode='html')
 
     async def load_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1283,7 +1315,6 @@ class Userbot:
             await msg.edit("<b>Сделай реплай на текстовый файл с шаблоном</b>", parse_mode='html')
 
     async def file_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1293,7 +1324,7 @@ class Userbot:
         os.remove('texts.txt')
         await msg.delete()
 
-    # ========== НАСТОЯЩИЙ ПИНГ (РЕАЛЬНЫЙ ЗАПРОС К API) ==========
+    # ========== ПИНГ ==========
     async def ping_handler(self, msg):
         if self._is_forwarded(msg):
             return
@@ -1322,7 +1353,6 @@ class Userbot:
         await msg.edit(result, parse_mode='html')
 
     async def target_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1369,7 +1399,6 @@ class Userbot:
         await msg.edit(f"<b>⛧ ЦЕЛЬ УСТАНОВЛЕНА ⛧</b>\n⛧ <b>Цель:</b> {target_input}\n⛧ <b>Автоотключение через:</b> {minutes} минут", parse_mode='html')
 
     async def tgoff_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1380,7 +1409,6 @@ class Userbot:
         await msg.edit("<b>⛧ ЦЕЛЬ ОТКЛЮЧЕНА ⛧</b>", parse_mode='html')
 
     async def shb_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1455,10 +1483,8 @@ class Userbot:
         else:
             await msg.edit("<b>неизвестная команда. используй: list, load, save, del</b>", parse_mode='html')
 
-    # ========== НОВЫЕ КОМАНДЫ: .tshow и .tfile all ==========
+    # ========== .tshow и .tfile all ==========
     async def tshow_handler(self, msg):
-        """Показывает содержимое шаблона"""
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1488,8 +1514,6 @@ class Userbot:
         await msg.edit(f"<b>⛧ Шаблон <code>{template_name}</code> ({len(lines)} строк):</b>\n\n<code>{preview}</code>", parse_mode='html')
 
     async def tfile_all_handler(self, msg):
-        """Скачивает все шаблоны архивом"""
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1521,10 +1545,8 @@ class Userbot:
 
     # ========== СПАМ-КАПЧА ==========
     async def spamcap_handler(self, msg):
-        """Управление спам-капчей"""
         global spam_captcha_global, spam_captcha_by_chat
         
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1579,10 +1601,8 @@ class Userbot:
         spam_captcha_global = args.strip()
         await msg.edit(f"<b>⛧ Глобальная капча установлена: {spam_captcha_global}</b>", parse_mode='html')
 
-    # ========== .forward И .fstop ==========
+    # ========== .forward и .fstop ==========
     async def forward_handler(self, msg):
-        """Пересылка сообщения по таймеру"""
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1608,7 +1628,6 @@ class Userbot:
         reply_msg = await msg.get_reply_message()
         chat_id = msg.chat_id
         
-        # Останавливаем старую пересылку
         if chat_id in forwarding_tasks:
             task = forwarding_tasks[chat_id]
             if task and not task.done():
@@ -1640,8 +1659,6 @@ class Userbot:
         await msg.edit(f"<b>⛧ ПЕРЕСЫЛКА ЗАПУЩЕНА ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>\n⛧ <b>Интервал:</b> {delay} сек\n⛧ <b>Остановить:</b> .fstop", parse_mode='html')
 
     async def fstop_handler(self, msg):
-        """Останавливает пересылку"""
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1658,8 +1675,6 @@ class Userbot:
 
     # ========== .name ==========
     async def name_handler(self, msg):
-        """Изменяет имя бота в меню"""
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1674,8 +1689,6 @@ class Userbot:
 
     # ========== .trglist ==========
     async def trglist_handler(self, msg):
-        """Список активных целей"""
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1686,10 +1699,8 @@ class Userbot:
 
     # ========== .afk ==========
     async def afk_handler(self, msg):
-        """Управление AFK статусом"""
         global afk_state, afk_reason, afk_photo, afk_captcha, afk_start_time, afk_user_list
         
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1752,7 +1763,6 @@ class Userbot:
 
     # ========== МЕДИА ХАНДЛЕРЫ ==========
     async def med_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1842,7 +1852,6 @@ class Userbot:
 
     # ========== ОСТАЛЬНЫЕ ХАНДЛЕРЫ ==========
     async def scrape_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1892,8 +1901,8 @@ class Userbot:
         except Exception as e:
             await msg.edit(f"<b>Ошибка: {e}</b>", parse_mode='html')
 
+    # ========== .autodel (ИСПРАВЛЕННЫЙ — УДАЛЯЕТ ТОЛЬКО СООБЩЕНИЯ БОТА) ==========
     async def autodel_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1919,9 +1928,15 @@ class Userbot:
         async def auto_delete():
             await asyncio.sleep(delay)
             try:
-                async for message in self.client.iter_messages(chat_id, from_user='me'):
-                    await message.delete()
-                    await asyncio.sleep(0.5)
+                me = await self.client.get_me()
+                bot_id = me.id
+                
+                async for message in self.client.iter_messages(chat_id, from_user=bot_id):
+                    try:
+                        await message.delete()
+                        await asyncio.sleep(0.5)
+                    except Exception as e:
+                        logger.error(f"[Аккаунт {self.account_index+1}] Ошибка удаления сообщения: {e}")
             except Exception as e:
                 logger.error(f"[Аккаунт {self.account_index+1}] Autodel ошибка: {e}")
             finally:
@@ -1933,7 +1948,6 @@ class Userbot:
         await msg.edit(f"<b>⛧ АВТОУДАЛЕНИЕ ВКЛЮЧЕНО ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>\n⛧ <b>Удаление через:</b> {delay} сек", parse_mode='html')
 
     async def check_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1956,7 +1970,6 @@ class Userbot:
             await msg.edit("<b>Текст на латинице, похож на английский.</b>", parse_mode='html')
 
     async def log_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -1992,7 +2005,6 @@ class Userbot:
 
     # ========== СЛЕЖЕНИЕ ==========
     async def track_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2000,6 +2012,9 @@ class Userbot:
         user_id = None
         user_name = None
         username = ""
+        track_time = 60
+        
+        args = await self.get_args(msg)
         
         if msg.is_reply:
             reply_msg = await msg.get_reply_message()
@@ -2010,20 +2025,39 @@ class Userbot:
             user_id = target_user.id
             user_name = await self.get_entity_name(target_user)
             username = f"@{target_user.username}" if target_user.username else ""
+            
+            if args:
+                try:
+                    track_time = int(args.strip())
+                except ValueError:
+                    await msg.edit("<b>⛧ ОШИБКА ⛧</b>\n\nВремя должно быть числом (минуты)", parse_mode='html')
+                    return
         else:
-            args = await self.get_args(msg)
             if not args:
-                await msg.edit("<b>использование: .track @username или .track + реплай на сообщение</b>", parse_mode='html')
+                await msg.edit("<b>использование: .track @username [время в минутах] или .track + реплай</b>", parse_mode='html')
                 return
             
-            arg = args.strip()
+            parts = args.strip().split()
+            target_input = parts[0]
+            
+            if len(parts) > 1:
+                try:
+                    track_time = int(parts[1])
+                except ValueError:
+                    await msg.edit("<b>⛧ ОШИБКА ⛧</b>\n\nВремя должно быть числом (минуты)", parse_mode='html')
+                    return
+            
+            if track_time < 1:
+                await msg.edit("<b>⛧ ОШИБКА ⛧</b>\n\nМинимальное время — 1 минута", parse_mode='html')
+                return
+            
             try:
-                if arg.lstrip('-').isdigit():
-                    target_user = await self.client.get_entity(int(arg))
+                if target_input.lstrip('-').isdigit():
+                    target_user = await self.client.get_entity(int(target_input))
                 else:
-                    if not arg.startswith('@'):
-                        arg = '@' + arg
-                    target_user = await self.client.get_entity(arg)
+                    if not target_input.startswith('@'):
+                        target_input = '@' + target_input
+                    target_user = await self.client.get_entity(target_input)
                 
                 user_id = target_user.id
                 user_name = await self.get_entity_name(target_user)
@@ -2042,14 +2076,14 @@ class Userbot:
                 old_task.cancel()
         
         async def track_wait_and_notify():
-            await asyncio.sleep(3600)
+            await asyncio.sleep(track_time * 60)
             try:
                 for i in range(3):
                     await self.client.send_message(
                         chat_id,
                         f"<b>⛧ Слежение ⛧</b>\n\n"
                         f"<b>Пользователь:</b> {user_name} {username}\n"
-                        f"<b>Статус:</b> не писал 1 час\n\n"
+                        f"<b>Статус:</b> не писал {track_time} минут\n\n"
                         f"<b>Слежение отключено</b>",
                         parse_mode='html'
                     )
@@ -2080,12 +2114,11 @@ class Userbot:
             f"<b>⛧ Слежение установлено ⛧</b>\n\n"
             f"<b>Пользователь:</b> {user_name} {username}\n"
             f"<b>Чат:</b> {chat_name}\n"
-            f"<b>Условие:</b> если не напишет 1 час — уведомлю в этом чате (3 раза)",
+            f"<b>Уведомлю спустя:</b> {track_time} минут",
             parse_mode='html'
         )
 
     async def trackoff_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2131,7 +2164,6 @@ class Userbot:
             await msg.edit("<b>⛧ Слежение на этого пользователя не найдено</b>", parse_mode='html')
 
     async def tracklist_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2154,9 +2186,8 @@ class Userbot:
         result += "<b>Остановить:</b> .trackoff @username или реплай"
         await msg.edit(result, parse_mode='html')
 
-    # ========== ПОИСК ==========
+    # ========== ПОИСК (ИСПРАВЛЕННЫЙ — БЫСТРЫЙ ПОИСК) ==========
     async def detect_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2173,7 +2204,14 @@ class Userbot:
         search_id = len(self.active_searches) + 1
         original_chat_id = msg.chat_id
         
-        await msg.edit(f"<b>⛧ Поиск запущен ⛧</b>\n\n<b>Фраза:</b> {phrase}\n<b>Статус:</b> поиск...\n<b>ID поиска:</b> {search_id}\n\nРезультаты появятся здесь по мере нахождения.", parse_mode='html')
+        status_msg = await msg.edit(
+            f"<b>⛧ Поиск запущен ⛧</b>\n\n"
+            f"<b>Фраза:</b> {phrase}\n"
+            f"<b>Статус:</b> поиск...\n"
+            f"<b>ID поиска:</b> {search_id}\n\n"
+            f"Результаты появятся здесь по мере нахождения.",
+            parse_mode='html'
+        )
         
         results = []
         
@@ -2181,12 +2219,33 @@ class Userbot:
             nonlocal results
             try:
                 dialogs = await self.client.get_dialogs()
+                total_chats = len(dialogs)
+                searched = 0
+                
                 for dialog in dialogs:
                     if not self.active_searches.get(search_id, {}).get('active', True):
                         break
                     
+                    searched += 1
+                    
                     try:
-                        async for message in self.client.iter_messages(dialog.id, limit=500, search=phrase):
+                        await status_msg.edit(
+                            f"<b>⛧ Поиск запущен ⛧</b>\n\n"
+                            f"<b>Фраза:</b> {phrase}\n"
+                            f"<b>Статус:</b> поиск... ({searched}/{total_chats} чатов)\n"
+                            f"<b>Найдено:</b> {len(results)}\n"
+                            f"<b>ID поиска:</b> {search_id}",
+                            parse_mode='html'
+                        )
+                    except:
+                        pass
+                    
+                    try:
+                        async for message in self.client.iter_messages(
+                            dialog.id,
+                            search=phrase,
+                            limit=100
+                        ):
                             if not self.active_searches.get(search_id, {}).get('active', True):
                                 break
                             
@@ -2196,34 +2255,38 @@ class Userbot:
                                 sender = await message.get_sender()
                                 sender_name = sender.first_name if sender else "Unknown"
                                 sender_username = f"@{sender.username}" if sender and sender.username else ""
-                                message_link = f"https://t.me/c/{str(chat_id)[4:]}/{message.id}" if str(chat_id).startswith('-100') else f"https://t.me/{dialog.entity.username}/{message.id}" if dialog.entity.username else None
+                                
+                                if str(chat_id).startswith('-100'):
+                                    message_link = f"https://t.me/c/{str(chat_id)[4:]}/{message.id}"
+                                elif dialog.entity and hasattr(dialog.entity, 'username') and dialog.entity.username:
+                                    message_link = f"https://t.me/{dialog.entity.username}/{message.id}"
+                                else:
+                                    message_link = None
                                 
                                 result = {
                                     'chat_title': chat_title,
                                     'chat_id': chat_id,
                                     'sender_name': sender_name,
                                     'sender_username': sender_username,
-                                    'text': message.text[:200],
+                                    'text': message.text[:300],
                                     'link': message_link
                                 }
                                 results.append(result)
                                 
-                                if len(results) >= 15:
+                                if len(results) >= 20:
                                     break
-                            
-                            await asyncio.sleep(0.1)
                     except Exception as e:
                         logger.error(f"[Аккаунт {self.account_index+1}] Ошибка при поиске в чате {dialog.id}: {e}")
                     
-                    if len(results) >= 15:
+                    if len(results) >= 20:
                         break
-                    
-                    await asyncio.sleep(0.5)
                 
-                report = f"<b>⛧ РЕЗУЛЬТАТ ПОИСКА ⛧</b>\n\n<b>Фраза:</b> {phrase}\n"
+                report = f"<b>⛧ РЕЗУЛЬТАТ ПОИСКА ⛧</b>\n\n"
+                report += f"<b>Фраза:</b> {phrase}\n"
+                report += f"<b>Проверено чатов:</b> {searched}\n"
                 
                 if results:
-                    report += f"\n<b>Найдено в чатах ({len(results)}):</b>\n\n"
+                    report += f"\n<b>Найдено ({len(results)}):</b>\n\n"
                     for i, res in enumerate(results, 1):
                         report += f"{i}. <b>Чат:</b> {res['chat_title']} (ID: {res['chat_id']})\n"
                         report += f"   <b>Автор:</b> {res['sender_name']} {res['sender_username']}\n"
@@ -2235,7 +2298,7 @@ class Userbot:
                     report += f"\n<b>Результат:</b> не найдено ни одного совпадения\n"
                 
                 try:
-                    await msg.edit(report, parse_mode='html')
+                    await status_msg.edit(report, parse_mode='html')
                 except Exception as e:
                     logger.error(f"[Аккаунт {self.account_index+1}] Ошибка отправки отчёта: {e}")
                 
@@ -2243,7 +2306,7 @@ class Userbot:
                     del self.active_searches[search_id]
                     
             except Exception as e:
-                await msg.edit(f"<b>Ошибка при поиске: {e}</b>", parse_mode='html')
+                await status_msg.edit(f"<b>Ошибка при поиске: {e}</b>", parse_mode='html')
                 if search_id in self.active_searches:
                     del self.active_searches[search_id]
         
@@ -2256,7 +2319,6 @@ class Userbot:
         }
 
     async def detectoff_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2292,7 +2354,6 @@ class Userbot:
             await msg.edit("<b>укажите ID поиска\nпример: .detectoff 1</b>", parse_mode='html')
 
     async def detectlist_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2309,7 +2370,6 @@ class Userbot:
 
     # ========== МЕНЮ-ХЕНДЛЕРЫ ==========
     async def help_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2328,7 +2388,6 @@ class Userbot:
             await msg.edit(caption, parse_mode='html')
 
     async def menu_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2346,7 +2405,6 @@ class Userbot:
             await msg.edit(menu, parse_mode='html')
 
     async def more_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2364,7 +2422,6 @@ class Userbot:
             await msg.edit(more_text, parse_mode='html')
 
     async def othermore_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2382,7 +2439,6 @@ class Userbot:
             await msg.edit(othermore_text, parse_mode='html')
 
     async def incom_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2400,7 +2456,6 @@ class Userbot:
             await msg.edit(incom_text, parse_mode='html')
 
     async def postecom_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2418,7 +2473,6 @@ class Userbot:
             await msg.edit(postecom_text, parse_mode='html')
 
     async def custom_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2436,7 +2490,6 @@ class Userbot:
             await msg.edit(custom_text, parse_mode='html')
 
     async def files_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2450,7 +2503,6 @@ class Userbot:
             await msg.edit(files_text, parse_mode='html')
 
     async def x0_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2493,7 +2545,6 @@ class Userbot:
 
     # ========== POST COMMANDS ==========
     async def poste_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2648,7 +2699,6 @@ class Userbot:
             self.save_json(self.poste_file, self.poste_list)
 
     async def poste_stop_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2669,7 +2719,6 @@ class Userbot:
             await msg.edit(f"<b>рассылка для {link} не найдена</b>", parse_mode='html')
 
     async def poste_list_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2681,7 +2730,6 @@ class Userbot:
         await msg.edit("<b>активные рассылки:</b>\n" + "\n".join(lines), parse_mode='html')
 
     async def pblk_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2748,7 +2796,6 @@ class Userbot:
             await msg.edit("<b>неизвестное действие. доступно: list, add, del, clear</b>", parse_mode='html')
 
     async def pblkclear_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2757,7 +2804,6 @@ class Userbot:
         await msg.edit("<b>блок-лист полностью очищен</b>", parse_mode='html')
 
     async def zw_handler(self, msg):
-        # Защита от пересылки
         if self._is_forwarded(msg):
             return
         
@@ -2794,7 +2840,6 @@ class Userbot:
         self.target_user = None
         self.target_chat_id_for_timer = None
         
-        # Останавливаем пересылки
         for chat_id in list(forwarding_enabled.keys()):
             forwarding_enabled[chat_id] = False
         for chat_id, task in list(forwarding_tasks.items()):
@@ -2803,7 +2848,6 @@ class Userbot:
         forwarding_tasks.clear()
         forwarding_enabled.clear()
         
-        # Выключаем AFK
         afk_state = False
         afk_user_list = []
         save_afk_state()
@@ -2812,11 +2856,11 @@ class Userbot:
         
         await msg.edit("<b>все функции остановлены</b>", parse_mode='html')
 
-    # ========== ЗАПУСК БОТА С ОПТИМИЗАЦИЕЙ ==========
+    # ========== ЗАПУСК БОТА ==========
     async def run_bot(self):
         await self.client.start()
         me = await self.client.get_me()
-        self.me_id = me.id  # ← СОХРАНЯЕМ ID АККАУНТА!
+        self.me_id = me.id
         print(f"[Аккаунт {self.account_index+1}] Бот запущен! ({self.client.session.filename})", flush=True)
         print(f"[Аккаунт {self.account_index+1}] Имя: {me.first_name} (@{me.username})", flush=True)
         print(f"[Аккаунт {self.account_index+1}] ID: {self.me_id}", flush=True)
@@ -2877,13 +2921,12 @@ class Userbot:
                         
                         new_task = asyncio.create_task(track_wait_and_notify())
                         self.track_list[chat_id][user_id]['task'] = new_task
-                return  # ← ВАЖНО: не обрабатываем команды из чужих сообщений
+                return
             
             # ===== ИСХОДЯЩИЕ СООБЩЕНИЯ (команды от себя) =====
             if not text:
                 return
             
-            # Защита от пересылки
             if self._is_forwarded(msg):
                 logger.info(f"[Аккаунт {self.account_index+1}] Игнорируем пересланную команду: {text[:50]}")
                 return
@@ -2951,19 +2994,16 @@ class Userbot:
         await self.client.run_until_disconnected()
 
 
-# ==================== ЗАПУСК ВСЕХ АККАУНТОВ (С МОНИТОРИНГОМ) ====================
+# ==================== ЗАПУСК ВСЕХ АККАУНТОВ ====================
 async def main():
-    """Запускает все аккаунты из списка ACCOUNTS с мониторингом"""
     bots = []
     for i in range(len(ACCOUNTS)):
         bot = Userbot(i)
         bots.append(bot)
         asyncio.create_task(bot.run_bot())
     
-    # Даём задачам время на запуск
     await asyncio.sleep(2)
     
-    # Мониторинг состояния аккаунтов
     try:
         while True:
             for bot in bots:
@@ -2972,13 +3012,11 @@ async def main():
                     logger.error(f"[Аккаунт {idx}] Бот отключился, перезапускаем...")
                     print(f"[Аккаунт {idx}] Перезапуск...", flush=True)
                     asyncio.create_task(bot.run_bot())
-            await asyncio.sleep(30)  # Проверяем каждые 30 секунд
+            await asyncio.sleep(30)
     except asyncio.CancelledError:
         pass
 
 
 if __name__ == "__main__":
-    # Запуск веб-сервера для Render в отдельном потоке
     threading.Thread(target=run_web, daemon=True).start()
-    # Запуск основного цикла
     asyncio.run(main())
