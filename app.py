@@ -441,8 +441,8 @@ class Userbot:
         self.afk_user_list = []
         
         # ===== СПИСКИ ЗАДАЧ ДЛЯ ОСТАНОВКИ =====
-        self.spam_tasks = {}      # ← ДОБАВЛЕНО!
-        self.tagger_tasks = {}    # ← ДОБАВЛЕНО!
+        self.spam_tasks = {}
+        self.tagger_tasks = {}
         
         # ===== ФАЙЛЫ ДЛЯ СОХРАНЕНИЯ =====
         acc = account_index + 1
@@ -825,44 +825,7 @@ class Userbot:
             except:
                 await msg.edit('<b>⛧ ИСПОЛЬЗОВАНИЕ ⛧</b>\n\n.reply_media [id] [ссылка]', parse_mode='html')
 
-    # ========== СПАМ (ИСПРАВЛЕННЫЙ) ==========
-    async def _spam_loop(self, chat_id, time_val, media_path, custom_text, reply):
-        try:
-            while chat_id in self.spam_state and self.spam_state[chat_id]:
-                try:
-                    random_phrase = choice(current_shablon) if current_shablon else ""
-                    if custom_text:
-                        send_text = f"{custom_text} {random_phrase}".strip()
-                    else:
-                        send_text = random_phrase
-                    
-                    chat_key = str(chat_id)
-                    if chat_key in spam_captcha_by_chat and spam_captcha_by_chat[chat_key]:
-                        send_text = f"{spam_captcha_by_chat[chat_key]} {send_text}".strip()
-                    elif spam_captcha_global:
-                        send_text = f"{spam_captcha_global} {send_text}".strip()
-                    
-                    if media_path:
-                        await self.client.send_message(chat_id, send_text, file=media_path, reply_to=reply.id if reply else None)
-                    else:
-                        await self.client.send_message(chat_id, send_text, reply_to=reply.id if reply else None)
-                except Exception as e:
-                    logger.error(f"[Аккаунт {self.account_index+1}] Спам ошибка: {e}")
-                await asyncio.sleep(time_val)
-        except asyncio.CancelledError:
-            logger.info(f"[Аккаунт {self.account_index+1}] Спам в {chat_id} остановлен")
-        finally:
-            if chat_id in self.spam_state:
-                del self.spam_state[chat_id]
-                self.save_json(self.spam_file, self.spam_state)
-            if chat_id in self.spam_tasks:
-                del self.spam_tasks[chat_id]
-            if media_path and os.path.exists(media_path):
-                try:
-                    os.remove(media_path)
-                except:
-                    pass
-
+    # ========== СПАМ (ИСПРАВЛЕННЫЙ — БЕЗ РЕПЛАЯ РАБОТАЕТ!) ==========
     async def renewal_handler(self, msg):
         if self._is_forwarded(msg):
             return
@@ -886,7 +849,11 @@ class Userbot:
         media_path = await self.get_media_to_send(media_id, media_url)
         
         reply = await msg.get_reply_message()
-        chat_id = msg.chat_id
+        # ===== ЕСЛИ ЕСТЬ РЕПЛАЙ — БЕРЁМ ЕГО CHAT_ID, ИНАЧЕ ТЕКУЩИЙ ЧАТ =====
+        if reply:
+            chat_id = reply.chat_id
+        else:
+            chat_id = msg.chat_id
         
         # ===== ОСТАНАВЛИВАЕМ СТАРУЮ ЗАДАЧУ =====
         if chat_id in self.spam_tasks:
@@ -899,9 +866,43 @@ class Userbot:
         
         self.save_json(self.spam_file, self.spam_state)
         
-        # ===== СОЗДАЁМ НОВУЮ ЗАДАЧУ =====
-        task = asyncio.create_task(self._spam_loop(chat_id, time_val, media_path, custom_text, reply))
-        self.spam_tasks[chat_id] = task
+        # ===== ЗАПУСКАЕМ ЦИКЛ ПРЯМО ЗДЕСЬ (БЕЗ ОТДЕЛЬНОЙ ФУНКЦИИ) =====
+        try:
+            while chat_id in self.spam_state and self.spam_state[chat_id]:
+                try:
+                    random_phrase = choice(current_shablon) if current_shablon else ""
+                    if custom_text:
+                        send_text = f"{custom_text} {random_phrase}".strip()
+                    else:
+                        send_text = random_phrase
+                    
+                    chat_key = str(chat_id)
+                    if chat_key in spam_captcha_by_chat and spam_captcha_by_chat[chat_key]:
+                        send_text = f"{spam_captcha_by_chat[chat_key]} {send_text}".strip()
+                    elif spam_captcha_global:
+                        send_text = f"{spam_captcha_global} {send_text}".strip()
+                    
+                    # ===== ОТПРАВКА =====
+                    if media_path:
+                        await self.client.send_message(chat_id, send_text, file=media_path)
+                    else:
+                        await self.client.send_message(chat_id, send_text)
+                except Exception as e:
+                    logger.error(f"[Аккаунт {self.account_index+1}] Спам ошибка: {e}")
+                await asyncio.sleep(time_val)
+        except asyncio.CancelledError:
+            logger.info(f"[Аккаунт {self.account_index+1}] Спам в {chat_id} остановлен")
+        finally:
+            if chat_id in self.spam_state:
+                del self.spam_state[chat_id]
+                self.save_json(self.spam_file, self.spam_state)
+            if chat_id in self.spam_tasks:
+                del self.spam_tasks[chat_id]
+            if media_url and media_path and os.path.exists(media_path):
+                try:
+                    os.remove(media_path)
+                except:
+                    pass
 
     async def stop_handler(self, msg):
         if self._is_forwarded(msg):
@@ -910,7 +911,6 @@ class Userbot:
         args = await self.get_args(msg)
         chat_id = int(args.split()[0]) if args else msg.chat_id
         
-        # ===== ОСТАНАВЛИВАЕМ ЗАДАЧУ =====
         if chat_id in self.spam_tasks:
             self.spam_tasks[chat_id].cancel()
             await asyncio.sleep(0.5)
@@ -922,38 +922,7 @@ class Userbot:
         
         await msg.edit(f"<b>⛧ СПАМ ОСТАНОВЛЕН ⛧</b>\n⛧ <b>Чат:</b> <code>{chat_id}</code>", parse_mode='html')
 
-    # ========== ТЕГГЕР (ИСПРАВЛЕННЫЙ) ==========
-    async def _tagger_loop(self, chat_id, user_id, time_val, media_path, custom_text):
-        try:
-            while chat_id in self.tagger_chats:
-                random_phrase = choice(current_shablon) if current_shablon else ""
-                if custom_text:
-                    base_text = f"{custom_text} {random_phrase}".strip()
-                else:
-                    base_text = random_phrase
-                text = f"<a href='tg://user?id={user_id}'>{base_text}</a>"
-                try:
-                    if media_path:
-                        await self.client.send_file(chat_id, media_path, caption=text, parse_mode='html')
-                    else:
-                        await self.client.send_message(chat_id, text, parse_mode='html')
-                except Exception as e:
-                    logger.error(f"[Аккаунт {self.account_index+1}] Теггер ошибка: {e}")
-                await asyncio.sleep(time_val)
-        except asyncio.CancelledError:
-            logger.info(f"[Аккаунт {self.account_index+1}] Теггер в {chat_id} остановлен")
-        finally:
-            if chat_id in self.tagger_chats:
-                del self.tagger_chats[chat_id]
-                self.save_json(self.tagger_file, self.tagger_chats)
-            if chat_id in self.tagger_tasks:
-                del self.tagger_tasks[chat_id]
-            if media_path and os.path.exists(media_path):
-                try:
-                    os.remove(media_path)
-                except:
-                    pass
-
+    # ========== ТЕГГЕР (ИСПРАВЛЕННЫЙ — БЕЗ РЕПЛАЯ РАБОТАЕТ!) ==========
     async def tagger_handler(self, msg):
         if self._is_forwarded(msg):
             return
@@ -983,7 +952,11 @@ class Userbot:
         media_path = await self.get_media_to_send(media_id, media_url)
         
         reply_to_msg = await msg.get_reply_message()
-        chat_id = reply_to_msg.chat_id if reply_to_msg else msg.chat_id
+        # ===== ЕСЛИ ЕСТЬ РЕПЛАЙ — БЕРЁМ ЕГО CHAT_ID, ИНАЧЕ ТЕКУЩИЙ ЧАТ =====
+        if reply_to_msg:
+            chat_id = reply_to_msg.chat_id
+        else:
+            chat_id = msg.chat_id
         
         # ===== ОСТАНАВЛИВАЕМ СТАРУЮ ЗАДАЧУ =====
         if chat_id in self.tagger_tasks:
@@ -996,9 +969,36 @@ class Userbot:
         
         self.save_json(self.tagger_file, self.tagger_chats)
         
-        # ===== СОЗДАЁМ НОВУЮ ЗАДАЧУ =====
-        task = asyncio.create_task(self._tagger_loop(chat_id, user_id, time_val, media_path, custom_text))
-        self.tagger_tasks[chat_id] = task
+        # ===== ЗАПУСКАЕМ ЦИКЛ ПРЯМО ЗДЕСЬ (БЕЗ ОТДЕЛЬНОЙ ФУНКЦИИ) =====
+        try:
+            while chat_id in self.tagger_chats:
+                random_phrase = choice(current_shablon) if current_shablon else ""
+                if custom_text:
+                    base_text = f"{custom_text} {random_phrase}".strip()
+                else:
+                    base_text = random_phrase
+                text = f"<a href='tg://user?id={user_id}'>{base_text}</a>"
+                try:
+                    if media_path:
+                        await self.client.send_file(chat_id, media_path, caption=text, parse_mode='html')
+                    else:
+                        await self.client.send_message(chat_id, text, parse_mode='html')
+                except Exception as e:
+                    logger.error(f"[Аккаунт {self.account_index+1}] Теггер ошибка: {e}")
+                await asyncio.sleep(time_val)
+        except asyncio.CancelledError:
+            logger.info(f"[Аккаунт {self.account_index+1}] Теггер в {chat_id} остановлен")
+        finally:
+            if chat_id in self.tagger_chats:
+                del self.tagger_chats[chat_id]
+                self.save_json(self.tagger_file, self.tagger_chats)
+            if chat_id in self.tagger_tasks:
+                del self.tagger_tasks[chat_id]
+            if media_url and media_path and os.path.exists(media_path):
+                try:
+                    os.remove(media_path)
+                except:
+                    pass
 
     async def off_handler(self, msg):
         if self._is_forwarded(msg):
@@ -1007,7 +1007,6 @@ class Userbot:
         args = await self.get_args(msg)
         chat_id = int(args.split()[0]) if args else msg.chat_id
         
-        # ===== ОСТАНАВЛИВАЕМ ЗАДАЧУ =====
         if chat_id in self.tagger_tasks:
             self.tagger_tasks[chat_id].cancel()
             await asyncio.sleep(0.5)
@@ -1901,7 +1900,7 @@ class Userbot:
         except Exception as e:
             await msg.edit(f"<b>Ошибка: {e}</b>", parse_mode='html')
 
-    # ========== .autodel (ИСПРАВЛЕННЫЙ — УДАЛЯЕТ ТОЛЬКО СООБЩЕНИЯ БОТА) ==========
+    # ========== .autodel (ИСПРАВЛЕННЫЙ) ==========
     async def autodel_handler(self, msg):
         if self._is_forwarded(msg):
             return
@@ -2186,7 +2185,7 @@ class Userbot:
         result += "<b>Остановить:</b> .trackoff @username или реплай"
         await msg.edit(result, parse_mode='html')
 
-    # ========== ПОИСК (ИСПРАВЛЕННЫЙ — БЫСТРЫЙ ПОИСК) ==========
+    # ========== ПОИСК (БЫСТРЫЙ) ==========
     async def detect_handler(self, msg):
         if self._is_forwarded(msg):
             return
